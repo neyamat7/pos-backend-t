@@ -68,7 +68,8 @@ export const getAllCustomers = async (page, limit, search) => {
     .find(query)
     .skip(skip)
     .limit(limit)
-    .sort({ createdAt: -1 });
+    .limit(limit)
+    .sort({ isPinned: -1, createdAt: -1 });
 
   return {
     total,
@@ -240,4 +241,20 @@ export const getArchivedCustomers = async (page, limit, search) => {
     totalPages: Math.ceil(total / limit),
     customers,
   };
+};
+
+// @desc    Toggle customer pin status
+// @access  Admin
+export const toggleCustomerPin = async (id) => {
+  const customer = await customerModel.findById(id);
+
+  if (!customer) {
+    throw new Error("Customer not found");
+  }
+
+  return await customerModel.findByIdAndUpdate(
+    id,
+    { isPinned: !customer.isPinned },
+    { new: true }
+  );
 };

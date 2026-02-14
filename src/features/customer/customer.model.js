@@ -85,15 +85,22 @@ const customerSchema = new mongoose.Schema(
     },
 
     // Soft Delete Fields
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
+
     isActive: {
       type: Boolean,
       default: true,
       index: true, // Index for query performance
     },
+
     deletedAt: {
       type: Date,
       default: null,
     },
+    
     deletedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

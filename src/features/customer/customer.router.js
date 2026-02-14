@@ -9,7 +9,8 @@ import {
     getDueCustomersController,
     restoreCustomer,
     softDeleteCustomer,
-    updateCustomer,
+    toggleCustomerPin,
+    updateCustomer
 } from "./customer.controller.js";
 
 const router = express.Router();
@@ -36,6 +37,9 @@ router.delete("/delete/:id", softDeleteCustomer);
 
 // Restore from archive
 router.patch("/restore/:id", restoreCustomer);
+
+// Toggle pin status
+router.patch("/pin/:id", authMiddleware, toggleCustomerPin);
 
 // Get archived list
 router.get("/archived", getArchivedCustomers);

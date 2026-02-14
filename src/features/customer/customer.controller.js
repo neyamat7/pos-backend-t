@@ -217,4 +217,29 @@ export const getArchivedCustomers = async (req, res) => {
   }
 };
 
+// @desc    Toggle customer pin status
+// @route   PATCH /api/v1/customers/pin/:id
+// @access  Admin
+export const toggleCustomerPin = async (req, res) => {
+  try {
+    const customer = await customerService.toggleCustomerPin(req.params.id);
+
+    // Log activity
+    await logActivity({
+      model_name: "Customer",
+      logs_fields_id: customer._id,
+      by: req.user.id,
+      action: "Updated",
+      note: `Customer ${customer.basic_info.name} pin status toggled`,
+    });
+
+    res.status(200).json({
+      message: "Customer pin status updated successfully",
+      customer,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 
