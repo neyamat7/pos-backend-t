@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { getTotalExpensesByMonth } from "../expense/expense.service.js";
 import { getTotalCrateProfitByMonth } from "../inventoryCrate/inventoryCrate.services.js";
 import purchaseModel from "../purchase/purchase.model.js";
+import saleModel from "../sale/sale.model.js";
 import supplierModel from "../supplier/supplier.model.js";
 import { adjustSupplierDue } from "../supplier/supplier.service.js";
 import inventoryLotsModel from "./inventoryLots.model.js";
@@ -81,6 +82,7 @@ export const createLotsForPurchase = async (purchaseId) => {
             moshjid: lot.expenses.moshjid,
             trading_post: lot.expenses.trading_post,
             other_expenses: lot.expenses.other_expenses,
+            custom_expenses: lot.expenses.custom_expenses || [],
             extra_expense: lot.expenses.extra_expense || 0,
             extra_expense_note: lot.expenses.extra_expense_note || "",
             total_expenses:
@@ -90,7 +92,8 @@ export const createLotsForPurchase = async (purchaseId) => {
               lot.expenses.moshjid +
               lot.expenses.trading_post +
               lot.expenses.other_expenses +
-              (lot.expenses.extra_expense || 0),
+              (lot.expenses.extra_expense || 0) +
+              (lot.expenses.custom_expenses?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0),
           },
         });
 
@@ -544,6 +547,8 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
     lot.expenses.extra_expense_note = extra_expense_note || "";
 
     // Recalculate total_expenses
+    const totalCustomExpenses = lot.expenses.custom_expenses?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+
     lot.expenses.total_expenses =
       lot.expenses.labour +
       lot.expenses.transportation +
@@ -551,7 +556,8 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
       lot.expenses.moshjid +
       lot.expenses.trading_post +
       lot.expenses.other_expenses +
-      lot.expenses.extra_expense;
+      lot.expenses.extra_expense +
+      totalCustomExpenses;
 
     await lot.save({ session });
 
@@ -781,5 +787,78 @@ export const getLotsAnalytics = async (
     lots,
     totals,
   };
+};
+
+// @desc Delete a lot safely (reverts crates, checks sales)
+// @access Admin
+export const deleteLotService = async (lotId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Fetch Lot
+    const lot = await inventoryLotsModel.findById(lotId).session(session);
+    if (!lot) {
+      throw new Error("Lot not found");
+    }
+
+    // 2. Safety Check: Ensure no sales exist for this lot
+    const saleCount = await saleModel.countDocuments({
+      "items.selected_lots.lotId": lotId,
+    }).session(session);
+
+    if (saleCount > 0) {
+      throw new Error(`Cannot delete lot. It has ${saleCount} related sales.`);
+    }
+
+    // 3. Fetch Supplier to revert crates
+    const supplier = await supplierModel.findById(lot.supplierId).session(session);
+    if (!supplier) {
+      throw new Error("Associated supplier not found");
+    }
+
+    // 4. Revert Crate Balance (Type 1)
+    const lotsCrate1 = lot.carat?.carat_Type_1 || 0;
+    if (lotsCrate1 > 0) {
+      if (supplier.crate_info.needToGiveCrate1 >= lotsCrate1) {
+        // We owed them these crates, now we don't.
+        supplier.crate_info.needToGiveCrate1 -= lotsCrate1;
+      } else {
+        // We owed less than what this lot used, so the rest goes back to their hand.
+        const remaining = lotsCrate1 - supplier.crate_info.needToGiveCrate1;
+        supplier.crate_info.needToGiveCrate1 = 0;
+        supplier.crate_info.crate1 += remaining;
+      }
+    }
+
+    // 5. Revert Crate Balance (Type 2)
+    const lotsCrate2 = lot.carat?.carat_Type_2 || 0;
+    if (lotsCrate2 > 0) {
+      if (supplier.crate_info.needToGiveCrate2 >= lotsCrate2) {
+         // We owed them these crates, now we don't.
+        supplier.crate_info.needToGiveCrate2 -= lotsCrate2;
+      } else {
+         // We owed less than what this lot used, so the rest goes back to their hand.
+        const remaining = lotsCrate2 - supplier.crate_info.needToGiveCrate2;
+        supplier.crate_info.needToGiveCrate2 = 0;
+        supplier.crate_info.crate2 += remaining;
+      }
+    }
+
+    // 6. Save Supplier Changes
+    await supplier.save({ session });
+
+    // 7. Delete the Lot
+    await lot.deleteOne({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return { success: true, message: "Lot deleted and crates reverted successfully" };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
 };
 

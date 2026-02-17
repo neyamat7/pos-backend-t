@@ -82,3 +82,31 @@ export const updateProduct = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+// Soft delete a product
+export const deleteProduct = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+
+    const deletedProduct = await productService.deleteProductService(id);
+
+    if (!deletedProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Log activity
+    await logActivity({
+      model_name: "Product",
+      logs_fields_id: deletedProduct._id,
+      by: userId,
+      action: "Deleted",
+      note: `soft deleted product ${deletedProduct.productName} by ${userEmail}`,
+    });
+
+    res.status(200).json({ message: "Product deleted successfully", product: deletedProduct });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

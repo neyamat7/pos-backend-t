@@ -195,6 +195,18 @@ const inventoryLotsSchema = new mongoose.Schema(
         default: 0,
       },
 
+      custom_expenses: [
+        {
+          name: {
+            type: String,
+          },
+          amount: {
+            type: Number,
+            default: 0,
+          },
+        },
+      ],
+
       extra_expense: {
         type: Number,
         default: 0,

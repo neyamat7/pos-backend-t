@@ -4,7 +4,7 @@ import Product from "./products.model.js";
 export const getAllProducts = async (page, limit, search) => {
   const skip = (page - 1) * limit;
 
-  const query = {};
+  const query = { isDeleted: { $ne: true } };
   if (search) {
     query.productName = { $regex: search, $options: "i" };
   }
@@ -40,5 +40,13 @@ export const updateProduct = async (id, data) => {
   return await Product.findByIdAndUpdate(id, data, { new: true }).populate(
     "categoryId",
     "categoryName"
+  );
+};
+
+export const deleteProductService = async (id) => {
+  return await Product.findByIdAndUpdate(
+    id,
+    { isDeleted: true },
+    { new: true }
   );
 };

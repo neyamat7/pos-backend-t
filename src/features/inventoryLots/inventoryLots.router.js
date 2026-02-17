@@ -2,6 +2,7 @@ import express from "express";
 import {
     adjustStockController,
     createLots,
+    deleteLot,
     fetchAllLots,
     fetchLotDetails,
     getAllInStockLots,
@@ -47,5 +48,7 @@ router.patch("/:lotId/extra-expense", updateExtraExpenseController);
 router.get("/profit-loss", getProfitLoss);
 
 router.get("/analytics", getLotsAnalyticsController);
+
+router.delete("/:id", deleteLot);
 
 export default router;

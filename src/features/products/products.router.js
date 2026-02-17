@@ -1,12 +1,13 @@
 import express from "express";
 
+import { authMiddleware } from "../../middleware/auth.js";
 import {
   createProduct,
+  deleteProduct,
   getProductById,
   getProducts,
   updateProduct,
 } from "./products.controller.js";
-import { authMiddleware } from "../../middleware/auth.js";
 
 const router = express.Router();
 
@@ -21,5 +22,8 @@ router.post("/add", authMiddleware, createProduct);
 
 // Update an existing product
 router.put("/update/:id", authMiddleware, updateProduct);
+
+// Soft delete a product
+router.delete("/delete/:id", authMiddleware, deleteProduct);
 
 export default router;

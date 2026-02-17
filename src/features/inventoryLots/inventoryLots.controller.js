@@ -261,3 +261,21 @@ export const getLotsAnalyticsController = async (req, res) => {
   }
 };
 
+// @desc    Delete a lot
+// @route   DELETE /api/v1/inventoryLots/:id
+// @access  Admin
+export const deleteLot = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await inventoryLotsService.deleteLotService(id);
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Delete lot error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to delete lot",
+    });
+  }
+};
+
