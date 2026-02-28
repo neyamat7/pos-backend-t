@@ -227,7 +227,6 @@ const inventoryLotsSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
-
     },
 
     stock_adjust: {
@@ -245,6 +244,14 @@ const inventoryLotsSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    // Receipt images from supplier
+    receiptImages: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Image",
+      },
+    ],
   },
   {
     timestamps: true,

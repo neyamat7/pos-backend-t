@@ -63,13 +63,13 @@ export const getAllBalances = async (id, page, limit, filters = {}) => {
   // Filter by date range
   if (filters.fromDate || filters.toDate) {
     query.date = {};
-    
+
     if (filters.fromDate) {
       const fromDate = new Date(filters.fromDate);
       fromDate.setUTCHours(0, 0, 0, 0);
       query.date.$gte = fromDate;
     }
-    
+
     if (filters.toDate) {
       const toDate = new Date(filters.toDate);
       toDate.setUTCHours(23, 59, 59, 999);
@@ -106,7 +106,9 @@ export const addCustomerBalanceService = async (data) => {
 
   try {
     // 1. Get current customer data
-    const customer = await customerModel.findById(data.balance_for).session(session);
+    const customer = await customerModel
+      .findById(data.balance_for)
+      .session(session);
 
     if (!customer) {
       throw new Error("Customer not found");
@@ -138,11 +140,11 @@ export const addCustomerBalanceService = async (data) => {
 
     // 4. Update customer account
     const updates = {};
-    
+
     if (amountToDeductFromDue > 0) {
       updates["account_info.due"] = currentDue - amountToDeductFromDue;
     }
-    
+
     if (amountToAddToBalance > 0) {
       const currentBalance = Number(customer.account_info?.balance) || 0;
       updates["account_info.balance"] = currentBalance + amountToAddToBalance;
@@ -159,6 +161,65 @@ export const addCustomerBalanceService = async (data) => {
     session.endSession();
 
     return savedBalance;
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
+// @desc    Give a discount to a customer (reduces due, keeps record as discount type)
+// @access  Admin
+export const applyCustomerDiscountService = async (data) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Get current customer data
+    const customer = await customerModel
+      .findById(data.balance_for)
+      .session(session);
+
+    if (!customer) {
+      throw new Error("Customer not found");
+    }
+
+    const currentDue = Number(customer.account_info?.due) || 0;
+    const discountAmount = Number(data.amount) || 0;
+
+    if (discountAmount > currentDue) {
+      throw new Error(
+        "Discount amount cannot be greater than the current due."
+      );
+    }
+
+    // 2. Create balance record as 'discount'
+    const balance = new Balance({
+      ...data,
+      transaction_Id:
+        data.transaction_Id ||
+        `DISC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      role: "customer",
+      type: "discount",
+      payment_method: "none",
+    });
+    const savedDiscount = await balance.save({ session });
+
+    // 3. Update customer due ONLY (since this is a discount, not a payment)
+    const newDue = currentDue - discountAmount;
+
+    await customerModel.findByIdAndUpdate(
+      data.balance_for,
+      {
+        $set: { "account_info.due": newDue },
+      },
+      { new: true, session }
+    );
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return savedDiscount;
   } catch (error) {
     await session.abortTransaction();
     session.endSession();

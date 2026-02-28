@@ -14,6 +14,7 @@ const balanceSchema = new mongoose.Schema(
     transaction_Id: {
       type: String,
       unique: true,
+      sparse: true,
     },
     slip_img: {
       type: String,
@@ -25,7 +26,14 @@ const balanceSchema = new mongoose.Schema(
     },
     payment_method: {
       type: String,
-      enum: ["MFS", "bank", "cash"],
+      enum: ["MFS", "bank", "cash", "none"],
+      default: "none",
+    },
+
+    type: {
+      type: String,
+      enum: ["payment", "discount"],
+      default: "payment",
     },
 
     //

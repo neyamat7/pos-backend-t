@@ -11,7 +11,6 @@ import Sale from "./sale.model.js";
 // @desc Create sale a sale list + Update customer collection  ( caret info + due + balance ) Update inventory lots ( total sold + total sold kg + lotCommission + customerCommission ) + Create Income document
 // @access  Admin
 export const createSale = async (saleData) => {
-
   // console.log('saleData in sale services', saleData);
 
   const session = await mongoose.startSession();
@@ -128,12 +127,12 @@ export const createSale = async (saleData) => {
         const lotCommission = Number(lot.lot_commission_amount) || 0;
         const customerCommission = Number(lot.customer_commission_amount) || 0;
         const lotProfit = Number(lot.lot_profit) || 0;
-        
+
         // customerProfit depends on commission status
-        const customerProfit = inventoryLot.hasCommission 
+        const customerProfit = inventoryLot.hasCommission
           ? (Number(lot.customer_commission_amount) || 0)  // Commission lot: use customer commission
           : lotProfit;                                      // Non-commission lot: use lot profit
-        
+
         const totalProfit = lotProfit + (Number(lot.lot_commission_amount) || 0);
        
 
@@ -148,8 +147,8 @@ export const createSale = async (saleData) => {
           "sales.totalSoldPrice": (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
 
           // Increment profits (lotProfit only for commission-based lots)
-          "profits.lotProfit": inventoryLot.hasCommission 
-            ? (Number(inventoryLot.profits?.lotProfit) || 0) + lotCommission 
+          "profits.lotProfit": inventoryLot.hasCommission
+            ? (Number(inventoryLot.profits?.lotProfit) || 0) + lotCommission
             : (Number(inventoryLot.profits?.lotProfit) || 0),
           "profits.customerProfit":
             (Number(inventoryLot.profits?.customerProfit) || 0) + customerProfit,
@@ -656,16 +655,16 @@ export const getLotSummaryService = async (lotId) => {
           // Product type flags
           isBoxed: "$items.selected_lots.isBoxed",
           isPieced: "$items.selected_lots.isPieced",
-          
+
           // Quantity fields for different product types
           box_quantity: "$items.selected_lots.box_quantity",
           piece_quantity: "$items.selected_lots.piece_quantity",
           kg: "$items.selected_lots.kg",
-          
+
           // Crate information
           crate_type1: "$items.selected_lots.crate_type1",
           crate_type2: "$items.selected_lots.crate_type2",
-          
+
           // Common fields
           discount_Kg: "$items.selected_lots.discount_Kg",
           unit_price: "$items.selected_lots.unit_price",
@@ -753,4 +752,249 @@ export const getLotSummaryService = async (lotId) => {
   ]);
 
   return data[0] || {}; // return the first (and only) lot object
+};
+
+// @desc    Delete a sale and revert ALL related changes
+// @access  Admin
+export const deleteSale = async (saleId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Fetch the sale document
+    const sale = await Sale.findById(saleId).session(session);
+
+    if (!sale) {
+      throw new Error("Sale not found");
+    }
+
+    // 2. Calculate total crates used in this sale (for customer revert)
+    let totalCrateType1 = 0;
+    let totalCrateType2 = 0;
+
+    sale.items.forEach((item) => {
+      item.selected_lots.forEach((lot) => {
+        totalCrateType1 += Number(lot.crate_type1) || 0;
+        totalCrateType2 += Number(lot.crate_type2) || 0;
+      });
+    });
+
+    // 3. Revert Customer data
+    const customer = await customerModel
+      .findById(sale.customerId)
+      .session(session);
+
+    if (!customer) {
+      throw new Error("Customer not found");
+    }
+
+    const dueAmount = Number(sale.payment_details?.due_amount) || 0;
+
+    const customerUpdates = {
+      "account_info.due": Math.max(
+        0,
+        (Number(customer.account_info?.due) || 0) - dueAmount
+      ),
+      "crate_info.type_1": Math.max(
+        0,
+        (Number(customer.crate_info?.type_1) || 0) - totalCrateType1
+      ),
+      "crate_info.type_2": Math.max(
+        0,
+        (Number(customer.crate_info?.type_2) || 0) - totalCrateType2
+      ),
+    };
+
+    await customerModel.findByIdAndUpdate(
+      sale.customerId,
+      { $set: customerUpdates },
+      { session, new: true }
+    );
+
+    // 4. Revert each Inventory Lot
+    for (const item of sale.items) {
+      for (const lot of item.selected_lots) {
+        const inventoryLot = await inventoryLotsModel
+          .findById(lot.lotId)
+          .session(session);
+
+        if (!inventoryLot) {
+          console.warn(
+            `InventoryLot not found during delete: ${lot.lotId}, skipping...`
+          );
+          continue;
+        }
+
+        const kgSold = Number(lot.kg) || 0;
+        const boxSold = Number(lot.box_quantity) || 0;
+        const pieceSold = Number(lot.piece_quantity) || 0;
+        const crateType1Sold = Number(lot.crate_type1) || 0;
+        const crateType2Sold = Number(lot.crate_type2) || 0;
+        const soldPrice = Number(lot.selling_price) || 0;
+        const lotCommission = Number(lot.lot_commission_amount) || 0;
+        const lotProfit = Number(lot.lot_profit) || 0;
+
+        // Calculate the customerProfit that was added during create
+        const customerProfit = inventoryLot.hasCommission
+          ? Number(lot.customer_commission_amount) || 0
+          : lotProfit;
+
+        const totalProfit = lotProfit + lotCommission;
+
+        // 4a. If lot is currently "stock out" and has supplierDueAdded, revert supplier due
+        if (
+          inventoryLot.status === "stock out" &&
+          inventoryLot.supplierDueAdded
+        ) {
+          const supplierDueToRevert =
+            Number(inventoryLot.supplierDueAdded) || 0;
+
+          if (supplierDueToRevert > 0) {
+            const supplier = await mongoose
+              .model("Supplier")
+              .findById(inventoryLot.supplierId)
+              .session(session);
+
+            if (supplier) {
+              const currentSupplierDue =
+                Number(supplier.account_info?.due) || 0;
+
+              await mongoose
+                .model("Supplier")
+                .findByIdAndUpdate(
+                  inventoryLot.supplierId,
+                  {
+                    $set: {
+                      "account_info.due":
+                        currentSupplierDue - supplierDueToRevert,
+                    },
+                  },
+                  { session, new: true }
+                );
+            }
+          }
+        }
+
+        // 4b. Prepare lot reversal updates
+        const newRemainingBoxes =
+          (Number(inventoryLot.remaining_boxes) || 0) + boxSold;
+        const newRemainingPieces =
+          (Number(inventoryLot.remaining_pieces) || 0) + pieceSold;
+        const newRemainingCrate1 =
+          (Number(inventoryLot.carat?.remaining_crate_Type_1) || 0) +
+          crateType1Sold;
+        const newRemainingCrate2 =
+          (Number(inventoryLot.carat?.remaining_crate_Type_2) || 0) +
+          crateType2Sold;
+
+        // Determine new status — if any stock is restored, it's "in stock"
+        let newStatus = inventoryLot.status;
+        if (inventoryLot.status === "stock out") {
+          if (
+            boxSold > 0 ||
+            pieceSold > 0 ||
+            crateType1Sold > 0 ||
+            crateType2Sold > 0 ||
+            kgSold > 0
+          ) {
+            newStatus = "in stock";
+          }
+        }
+
+        const lotUpdates = {
+          // Subtract sales stats
+          "sales.totalKgSold": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalKgSold) || 0) - kgSold
+          ),
+          "sales.totalBoxSold": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalBoxSold) || 0) - boxSold
+          ),
+          "sales.totalPieceSold": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalPieceSold) || 0) - pieceSold
+          ),
+          "sales.totalCrateType1Sold": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalCrateType1Sold) || 0) -
+              crateType1Sold
+          ),
+          "sales.totalCrateType2Sold": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalCrateType2Sold) || 0) -
+              crateType2Sold
+          ),
+          "sales.totalSoldPrice": Math.max(
+            0,
+            (Number(inventoryLot.sales?.totalSoldPrice) || 0) - soldPrice
+          ),
+
+          // Restore remaining stock
+          remaining_boxes: newRemainingBoxes,
+          remaining_pieces: newRemainingPieces,
+          "carat.remaining_crate_Type_1": newRemainingCrate1,
+          "carat.remaining_crate_Type_2": newRemainingCrate2,
+
+          // Reverse profits
+          "profits.lotProfit": inventoryLot.hasCommission
+            ? Math.max(
+                0,
+                (Number(inventoryLot.profits?.lotProfit) || 0) - lotCommission
+              )
+            : Number(inventoryLot.profits?.lotProfit) || 0,
+          "profits.customerProfit": Math.max(
+            0,
+            (Number(inventoryLot.profits?.customerProfit) || 0) - customerProfit
+          ),
+          "profits.totalProfit":
+            (Number(inventoryLot.profits?.totalProfit) || 0) - totalProfit,
+
+          // Update status
+          status: newStatus,
+        };
+
+        // If reverting from stock out, clear the stock-out specific fields
+        if (inventoryLot.status === "stock out" && newStatus === "in stock") {
+          lotUpdates["profits.lot_loss"] = 0;
+          lotUpdates["supplierDueAdded"] = 0;
+        }
+
+        // Apply lot updates
+        await inventoryLotsModel.findByIdAndUpdate(
+          lot.lotId,
+          { $set: lotUpdates },
+          { session, new: true }
+        );
+      }
+    }
+
+    // 5. Delete Income record linked to this sale
+    await incomeModel.deleteMany(
+      { "information.saleId": saleId.toString() },
+      { session }
+    );
+
+    // 6. Delete Customer Crate History linked to this sale
+    await customerCrateHistoryModel.deleteMany(
+      { saleId: sale._id },
+      { session }
+    );
+
+    // 7. Delete the Sale document itself
+    await Sale.findByIdAndDelete(saleId, { session });
+
+    // 8. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      success: true,
+      message: "Sale deleted and all changes reverted successfully",
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
 };

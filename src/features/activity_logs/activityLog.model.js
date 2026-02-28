@@ -18,7 +18,6 @@ const activityLogSchema = new mongoose.Schema(
     },
     action: {
       type: String,
-      enum: ["Added", "Created", "Returned", "Updated", "Deleted", "Payment"],
       required: true,
     },
     note: {

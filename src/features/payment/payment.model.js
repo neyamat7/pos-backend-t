@@ -113,6 +113,11 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    discount_received: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

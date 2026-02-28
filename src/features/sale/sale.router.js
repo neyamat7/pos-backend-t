@@ -1,12 +1,13 @@
 import express from "express";
+import { authMiddleware } from "../../middleware/auth.js";
 import {
   createSale,
+  deleteSaleController,
   getAllSales,
   getLotSummaryController,
   getSaleById,
   salesByCustomer,
 } from "./sale.controller.js";
-import { authMiddleware } from "../../middleware/auth.js";
 
 const router = express.Router();
 
@@ -23,5 +24,8 @@ router.get("/by-customer/:id", salesByCustomer);
 router.get("/details/:id", getSaleById);
 
 router.get("/lot-sale-summary/:lotId", getLotSummaryController);
+
+// delete sale and revert all changes
+router.delete("/:id", authMiddleware, deleteSaleController);
 
 export default router;

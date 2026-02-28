@@ -6,7 +6,6 @@ import * as paymentService from "./payment.services.js";
 // @route   POST /api/v1/payments/add/
 // @access  Admin
 export const createTransaction = async (req, res, next) => {
-
   // console.log('req.body in payment controller', req.body);
 
   try {
@@ -86,6 +85,38 @@ export const getTransactionDetails = async (req, res, next) => {
     }
 
     res.status(200).json({ success: true, data: transaction });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Clear full supplier settlement
+// @route   POST /api/v1/payments/settlement
+// @access  Admin
+export const clearSupplierSettlementController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const result = await paymentService.clearSupplierSettlement(req.body);
+
+    const transaction = result.payment;
+
+    // Get supplier info
+    const supplier = await supplierModel
+      .findById(transaction.supplierId)
+      .select("basic_info.name");
+
+    const supplierName = supplier?.basic_info?.name;
+
+    // Log activity
+    await logActivity({
+      model_name: "Payment",
+      logs_fields_id: transaction._id,
+      by: userId,
+      action: "Full Settlement",
+      note: `Full settlement for ${supplierName}. Paid:${transaction.total_paid_amount}, Discount:${transaction.discount_received}`,
+    });
+
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }

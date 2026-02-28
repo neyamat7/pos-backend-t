@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
+import Balance from "../balance/balance.model.js";
 import { getTotalExpensesByMonth } from "../expense/expense.service.js";
+import Image from "../image/image.model.js";
 import { getTotalCrateProfitByMonth } from "../inventoryCrate/inventoryCrate.services.js";
+import Payment from "../payment/payment.model.js";
 import purchaseModel from "../purchase/purchase.model.js";
 import saleModel from "../sale/sale.model.js";
 import supplierModel from "../supplier/supplier.model.js";
@@ -39,7 +42,6 @@ export const createLotsForPurchase = async (purchaseId) => {
 
       // Loop over lots for this supplier
       for (const lot of item.lots) {
-
         // console.log('lot in create lot', lot);
 
         // Check duplicate lot
@@ -93,7 +95,10 @@ export const createLotsForPurchase = async (purchaseId) => {
               lot.expenses.trading_post +
               lot.expenses.other_expenses +
               (lot.expenses.extra_expense || 0) +
-              (lot.expenses.custom_expenses?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0),
+              (lot.expenses.custom_expenses?.reduce(
+                (sum, item) => sum + (item.amount || 0),
+                0
+              ) || 0),
           },
         });
 
@@ -159,6 +164,7 @@ export const getAllLots = async (page, limit, search) => {
     .populate("productsId", "productName")
     .populate("supplierId", "basic_info")
     .populate("purchaseListId", "purchase_date status")
+    .populate("receiptImages")
     .sort({ status: 1, createdAt: -1 })
     .skip(skip)
     .limit(limit);
@@ -313,13 +319,15 @@ export const getAllLotsBySupplier = async (
 
   // Only calculate summary if date filters are provided
   let summary = null;
-  
+
   if (filters.fromDate && filters.toDate) {
     // Execute aggregation for summary data (across all filtered lots, not just current page)
     const summaryResult = await inventoryLotsModel.aggregate([
       // Use only the match stages from the pipeline (before pagination)
       aggregationPipeline[0], // Match by supplier and date
-      ...(filters.search ? [aggregationPipeline[1], aggregationPipeline[2]] : [aggregationPipeline[1]]),
+      ...(filters.search
+        ? [aggregationPipeline[1], aggregationPipeline[2]]
+        : [aggregationPipeline[1]]),
       {
         $group: {
           _id: null,
@@ -327,9 +335,9 @@ export const getAllLotsBySupplier = async (
             $sum: {
               $add: [
                 { $ifNull: ["$sales.totalCrateType1Sold", 0] },
-                { $ifNull: ["$sales.totalCrateType2Sold", 0] }
-              ]
-            }
+                { $ifNull: ["$sales.totalCrateType2Sold", 0] },
+              ],
+            },
           },
           totalBoxesSold: { $sum: "$sales.totalBoxSold" },
           totalPiecesSold: { $sum: "$sales.totalPieceSold" },
@@ -339,7 +347,9 @@ export const getAllLotsBySupplier = async (
     ]);
 
     // Fetch supplier's due amount
-    const supplier = await supplierModel.findById(supplierId).select("account_info.due");
+    const supplier = await supplierModel
+      .findById(supplierId)
+      .select("account_info.due");
     const supplierDue = supplier?.account_info?.due || 0;
 
     // Extract summary data
@@ -547,7 +557,11 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
     lot.expenses.extra_expense_note = extra_expense_note || "";
 
     // Recalculate total_expenses
-    const totalCustomExpenses = lot.expenses.custom_expenses?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+    const totalCustomExpenses =
+      lot.expenses.custom_expenses?.reduce(
+        (sum, item) => sum + (item.amount || 0),
+        0
+      ) || 0;
 
     lot.expenses.total_expenses =
       lot.expenses.labour +
@@ -569,7 +583,7 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
 
       // Calculate new supplier due amount
       const newDueAmount = totalSoldAmount - lotProfit - totalExpenses;
-      
+
       // Get previous due added (default to 0 if not set)
       const previousDueAdded = Number(lot.supplierDueAdded) || 0;
 
@@ -578,7 +592,7 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
         supplierId: lot.supplierId,
         previousDueAdded,
         newDueAmount,
-        session
+        session,
       });
 
       // Update the lot's supplierDueAdded to the new amount
@@ -601,7 +615,6 @@ export const updateExtraExpense = async (lotId, extraExpenseData) => {
 // @access Public
 export const calculateProfitLoss = async (filters = {}) => {
   try {
-
     // Base query: always show stock out lots
     const query = {
       status: "stock out",
@@ -655,12 +668,7 @@ export const calculateProfitLoss = async (filters = {}) => {
 
 // @desc Get inventory lots analytics (filtered by month, supplier)
 // @access Admin
-export const getLotsAnalytics = async (
-  page,
-  limit,
-  monthName,
-  supplierId
-) => {
+export const getLotsAnalytics = async (page, limit, monthName, supplierId) => {
   const skip = (page - 1) * limit;
   const matchStage = {};
 
@@ -676,10 +684,10 @@ export const getLotsAnalytics = async (
     monthIndex = new Date().getMonth();
   }
 
-  if (!isNaN(monthIndex)) {
-    const startDate = new Date(year, monthIndex, 1);
-    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+  const startDate = new Date(year, monthIndex, 1);
+  const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
+  if (!isNaN(monthIndex)) {
     matchStage.purchase_date = {
       $gte: startDate,
       $lte: endDate,
@@ -722,6 +730,7 @@ export const getLotsAnalytics = async (
               totalLotProfit: { $sum: "$profits.lotProfit" },
               totalCombinedProfit: { $sum: "$profits.totalProfit" },
               totalLoss: { $sum: "$profits.lot_loss" },
+              totalExtraDiscount: { $sum: "$expenses.extra_discount" },
             },
           },
         ],
@@ -740,8 +749,28 @@ export const getLotsAnalytics = async (
     totalLotProfit: 0,
     totalCombinedProfit: 0,
     totalLoss: 0,
+    totalExtraDiscount: 0,
   };
   delete totals._id; // Remove _id from totals
+
+  // Step 1.1: Get Settlement Discounts from Payment collection
+  const paymentMatch = {
+    date: { $gte: startDate, $lte: endDate },
+    discount_received: { $gt: 0 },
+  };
+
+  if (supplierId) {
+    paymentMatch.supplierId = new mongoose.Types.ObjectId(supplierId);
+  }
+
+  const settlements = await Payment.find(paymentMatch)
+    .populate("supplierId", "basic_info.name")
+    .sort({ date: -1 });
+
+  const totalSettlementDiscount = settlements.reduce(
+    (sum, p) => sum + (p.discount_received || 0),
+    0
+  );
 
   // Step 2: Get total expenses for the same month
   // Call the expense service to get Expense + CashTransaction OUT data
@@ -751,32 +780,63 @@ export const getLotsAnalytics = async (
   // Call the crate service to get profit from crate re-stock transactions
   const crateProfitData = await getTotalCrateProfitByMonth(monthName, year);
 
-  // Step 4: Calculate Gross Profit and Net Profit
-  // Gross Profit = Total Combined Profit from lots + Crate Profit
-  const grossProfit = totals.totalCombinedProfit + crateProfitData.totalCrateProfit;
+  // Step 3.1: Get Customer Discounts (only if no specific supplier is filtered, as these are global store discounts)
+  let totalCustomerDiscount = 0;
+  if (!supplierId) {
+    const customerDiscounts = await Balance.find({
+      date: { $gte: startDate, $lte: endDate },
+      type: "discount",
+      role: "customer",
+    });
 
-  // Net Profit = Gross Profit - Total Loss - Total Expenses
-  // Ensure netProfit is never negative
-  const netProfit = Math.max(0, grossProfit - totals.totalLoss - expenseData.totalExpenses);
+    totalCustomerDiscount = customerDiscounts.reduce(
+      (sum, d) => sum + (d.amount || 0),
+      0
+    );
+  }
+
+  // Step 4: Calculate Gross Profit and Net Profit
+  // Gross Profit = Total Combined Profit from lots + Crate Profit + Discounts (received from supplier)
+  const totalAllDiscounts =
+    (totals.totalExtraDiscount || 0) + totalSettlementDiscount;
+
+  const grossProfit =
+    totals.totalCombinedProfit +
+    crateProfitData.totalCrateProfit +
+    totalAllDiscounts;
+
+  // Net Profit = (Gross Profit) - (Total Loss) - (Total Operating Expenses) - (Money forgiven to Customers)
+  const netProfit = Math.max(
+    0,
+    grossProfit -
+      totals.totalLoss -
+      expenseData.totalExpenses -
+      totalCustomerDiscount
+  );
 
   // Step 5: Add expense, crate profit, and profit calculations to totals
-  totals.totalExpenses = expenseData.totalExpenses;           // Total expenses (Expense + CashOut)
+  totals.totalExpenses = expenseData.totalExpenses; // Total expenses (Expense + CashOut)
   totals.expenseBreakdown = {
-    expenseRecords: expenseData.totalExpenseAmount,           // From Expense model
-    cashOutTransactions: expenseData.totalCashOut,            // From CashTransaction (type: OUT)
+    expenseRecords: expenseData.totalExpenseAmount, // From Expense model
+    cashOutTransactions: expenseData.totalCashOut, // From CashTransaction (type: OUT)
   };
-  
+
   totals.totalCrateProfit = crateProfitData.totalCrateProfit; // Total profit from crate re-stock
+  totals.totalDiscount = totalAllDiscounts; // Total money saved (Lot Extra Discounts + Settlement Discounts)
+  totals.totalSettlementDiscount = totalSettlementDiscount;
+  totals.totalExtraDiscount = totals.totalExtraDiscount || 0;
+  totals.totalCustomerDiscount = totalCustomerDiscount; // Money forgiven to customers
+
   totals.crateProfitBreakdown = {
-    type1Profit: crateProfitData.breakdown.type1.profit,      // Type 1 crate profit
-    type2Profit: crateProfitData.breakdown.type2.profit,      // Type 2 crate profit
-    type1Quantity: crateProfitData.breakdown.type1.quantity,  // Type 1 crate count
-    type2Quantity: crateProfitData.breakdown.type2.quantity,  // Type 2 crate count
+    type1Profit: crateProfitData.breakdown.type1.profit, // Type 1 crate profit
+    type2Profit: crateProfitData.breakdown.type2.profit, // Type 2 crate profit
+    type1Quantity: crateProfitData.breakdown.type1.quantity, // Type 1 crate count
+    type2Quantity: crateProfitData.breakdown.type2.quantity, // Type 2 crate count
   };
-  
-  totals.grossProfit = grossProfit;                           // Lot Profit + Crate Profit
- 
-  totals.netProfit = netProfit;                               // Gross Profit - Operating Expenses
+
+  totals.grossProfit = grossProfit; // Lot Profit + Crate Profit + Discounts
+
+  totals.netProfit = netProfit; // Gross Profit - Operating Expenses - Customer Discounts
 
   // Step 6: Return complete analytics with all profit metrics
   return {
@@ -785,6 +845,7 @@ export const getLotsAnalytics = async (
     limit,
     totalPages: Math.ceil(total / limit),
     lots,
+    settlements, // New field returns the specific discounts
     totals,
   };
 };
@@ -803,16 +864,20 @@ export const deleteLotService = async (lotId) => {
     }
 
     // 2. Safety Check: Ensure no sales exist for this lot
-    const saleCount = await saleModel.countDocuments({
-      "items.selected_lots.lotId": lotId,
-    }).session(session);
+    const saleCount = await saleModel
+      .countDocuments({
+        "items.selected_lots.lotId": lotId,
+      })
+      .session(session);
 
     if (saleCount > 0) {
       throw new Error(`Cannot delete lot. It has ${saleCount} related sales.`);
     }
 
     // 3. Fetch Supplier to revert crates
-    const supplier = await supplierModel.findById(lot.supplierId).session(session);
+    const supplier = await supplierModel
+      .findById(lot.supplierId)
+      .session(session);
     if (!supplier) {
       throw new Error("Associated supplier not found");
     }
@@ -835,10 +900,10 @@ export const deleteLotService = async (lotId) => {
     const lotsCrate2 = lot.carat?.carat_Type_2 || 0;
     if (lotsCrate2 > 0) {
       if (supplier.crate_info.needToGiveCrate2 >= lotsCrate2) {
-         // We owed them these crates, now we don't.
+        // We owed them these crates, now we don't.
         supplier.crate_info.needToGiveCrate2 -= lotsCrate2;
       } else {
-         // We owed less than what this lot used, so the rest goes back to their hand.
+        // We owed less than what this lot used, so the rest goes back to their hand.
         const remaining = lotsCrate2 - supplier.crate_info.needToGiveCrate2;
         supplier.crate_info.needToGiveCrate2 = 0;
         supplier.crate_info.crate2 += remaining;
@@ -854,7 +919,10 @@ export const deleteLotService = async (lotId) => {
     await session.commitTransaction();
     session.endSession();
 
-    return { success: true, message: "Lot deleted and crates reverted successfully" };
+    return {
+      success: true,
+      message: "Lot deleted and crates reverted successfully",
+    };
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -862,3 +930,181 @@ export const deleteLotService = async (lotId) => {
   }
 };
 
+// @desc    Update lot cost price retroactively (updates all previous sales and profits)
+// @access  Admin
+export const updateLotCostService = async (lotId, newUnitCost) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Get the target lot
+    const lot = await inventoryLotsModel.findById(lotId).session(session);
+    if (!lot) throw new Error("Lot not found");
+
+    const oldUnitCost = lot.costs.unitCost;
+    lot.costs.unitCost = Number(newUnitCost);
+
+    // 2. Find all sales that used this lot
+    const sales = await saleModel
+      .find({ "items.selected_lots.lotId": lotId })
+      .session(session);
+
+    let updatedLotProfitSum = 0;
+    let updatedCustomerProfitSum = 0;
+
+    for (const sale of sales) {
+      let saleTotalProfitChange = 0;
+
+      // Update specific items in the sale
+      sale.items.forEach((item) => {
+        item.selected_lots.forEach((lotItem) => {
+          if (lotItem.lotId.toString() === lotId.toString()) {
+            const oldLotProfit = lotItem.lot_profit || 0;
+            let newLotProfit = 0;
+
+            if (lot.hasCommission) {
+              // For commission lots, profit is typically based on commission_amount,
+              // which doesn't directly change with unitCost. However, we update the logic
+              // to stay consistent with how profits are stored.
+              newLotProfit = lotItem.customer_commission_amount || 0;
+            } else {
+              // For non-commission lots: Profit = (Selling Price) - (Qty * New Cost)
+              const qty =
+                lotItem.kg > 0
+                  ? lotItem.kg - (lotItem.discount_Kg || 0)
+                  : lotItem.box_quantity > 0
+                    ? lotItem.box_quantity
+                    : lotItem.piece_quantity;
+
+              newLotProfit = lotItem.selling_price - qty * Number(newUnitCost);
+            }
+
+            lotItem.lot_profit = Number(newLotProfit.toFixed(2));
+            saleTotalProfitChange += lotItem.lot_profit - oldLotProfit;
+
+            // Collect for lot aggregate updates later
+            if (lot.hasCommission) {
+              updatedLotProfitSum += lotItem.lot_commission_amount || 0;
+            } else {
+              updatedLotProfitSum += lotItem.lot_profit;
+            }
+          }
+        });
+      });
+
+      // Update Sample Total Profit
+      sale.total_profit = Number(
+        (sale.total_profit + saleTotalProfitChange).toFixed(2)
+      );
+      await sale.save({ session });
+
+      // 3. Update related Income record for this sale
+      const income = await incomeModel
+        .findOne({ "information.saleId": sale._id })
+        .session(session);
+      if (income) {
+        income.total_Income = Number(
+          (income.total_Income + saleTotalProfitChange).toFixed(2)
+        );
+        await income.save({ session });
+      }
+    }
+
+    // 4. Recalculate Lot aggregated profits
+    if (lot.hasCommission) {
+      lot.profits.lotProfit = updatedLotProfitSum;
+      // customerProfit for commission lots is usually the sum of sales values or commission
+      // We keep existing customerProfit logic from sale.services.js
+    } else {
+      lot.profits.lotProfit = 0; // Margin profit is stored in profits.customerProfit for non-comm lots
+      lot.profits.customerProfit = updatedLotProfitSum;
+    }
+
+    lot.profits.totalProfit =
+      lot.profits.lotProfit +
+      (lot.hasCommission ? 0 : lot.profits.customerProfit);
+
+    // 5. If lot is already "stock out", recalculate loss and supplier due
+    if (lot.status === "stock out") {
+      const { loss, customerProfit: finalCustomerProfit } =
+        calculateLotFinalProfitLoss(lot);
+      lot.profits.lot_loss = loss;
+
+      if (!lot.hasCommission) {
+        lot.profits.customerProfit = finalCustomerProfit;
+        lot.profits.totalProfit = finalCustomerProfit;
+      }
+
+      // Update supplier due if it was already recorded
+      if (lot.supplierDueAdded > 0) {
+        const totalSoldAmount = Number(lot.sales?.totalSoldPrice) || 0;
+        const totalExpenses = Number(lot.expenses?.total_expenses) || 0;
+
+        // Supplier Due = Sales - Our Profit (Commission) - Expenses
+        const newSupplierDue =
+          totalSoldAmount - lot.profits.lotProfit - totalExpenses;
+        const previousDueAdded = lot.supplierDueAdded;
+
+        await adjustSupplierDue({
+          supplierId: lot.supplierId,
+          previousDueAdded,
+          newDueAmount: newSupplierDue,
+          session,
+        });
+
+        lot.supplierDueAdded = newSupplierDue;
+      }
+    }
+
+    await lot.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      success: true,
+      message: "Lot cost updated and history corrected successfully",
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
+
+// @desc Add receipt image to a lot
+export const addReceiptImageService = async (lotId, file) => {
+  if (!file) throw new Error("Please upload an image file");
+
+  const lot = await inventoryLotsModel.findById(lotId);
+  if (!lot) throw new Error("Lot not found");
+
+  // Create image record
+  const image = await Image.create({
+    filename: file.filename,
+    filepath: file.path,
+    mimetype: file.mimetype,
+    size: file.size,
+  });
+
+  // Add to lot
+  lot.receiptImages.push(image._id);
+  await lot.save();
+
+  return image;
+};
+
+// @desc Remove a receipt image from a lot
+export const removeReceiptImageService = async (lotId, imageId) => {
+  const lot = await inventoryLotsModel.findById(lotId);
+  if (!lot) throw new Error("Lot not found");
+
+  // Remove from lot array
+  lot.receiptImages = lot.receiptImages.filter(
+    (id) => id.toString() !== imageId.toString()
+  );
+
+  await lot.save();
+
+  return { success: true, message: "Receipt image removed from lot" };
+};

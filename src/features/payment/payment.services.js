@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import incomeModel from "../income/income.model.js";
 import inventoryLotsModel from "../inventoryLots/inventoryLots.model.js";
 import supplierModel from "../supplier/supplier.model.js";
 import Payment from "./payment.model.js";
@@ -48,7 +49,7 @@ export const createTransaction = async (data) => {
     const prevDue = Number(supplier.account_info.due) || 0;
 
     const newBalance = prevBalance - (Number(payment.amount_from_balance) || 0);
-    
+
     // Subtract the total paid amount from the supplier's due
     const newDue = prevDue - (Number(payment.total_paid_amount) || 0);
 
@@ -120,4 +121,127 @@ export const getPaymentById = async (id) => {
   return await Payment.findById(id)
     .populate("supplierId")
     .populate("inventory_lot_ids");
+};
+
+// @desc    Clear full supplier settlement
+// @route   POST /api/v1/payments/settlement
+export const clearSupplierSettlement = async (data) => {
+  const {
+    supplierId,
+    date,
+    actuallyPaidAmount,
+    discountReceived,
+    amountFromBalance,
+    payment_method,
+    transactionId,
+    note,
+  } = data;
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    // 1. Fetch the supplier
+    const supplier = await supplierModel.findById(supplierId).session(session);
+    if (!supplier) throw new Error("Supplier not found");
+
+    // 2. Find all unpaid stock-out lots for this supplier to mark as paid
+    const unpaidLots = await inventoryLotsModel
+      .find({
+        supplierId,
+        status: "stock out",
+        payment_status: "unpaid",
+      })
+      .session(session);
+
+    const lotIds = unpaidLots.map((lot) => lot._id);
+
+    // 3. Update Supplier Balance and Due
+    const balanceToUse = Number(amountFromBalance) || 0;
+    const currentBalance = Number(supplier.account_info.balance) || 0;
+
+    if (balanceToUse > currentBalance) {
+      throw new Error("Insufficient balance available");
+    }
+
+    // Subtract from balance
+    supplier.account_info.balance = Math.max(0, currentBalance - balanceToUse);
+
+    // full settlement = actual cash + discount given by supplier + amount taken from balance
+    const totalReduction =
+      (Number(actuallyPaidAmount) || 0) +
+      (Number(discountReceived) || 0) +
+      balanceToUse;
+
+    const currentDue = Number(supplier.account_info.due) || 0;
+    supplier.account_info.due = Math.max(0, currentDue - totalReduction);
+
+    await supplier.save({ session });
+
+    // 4. Update Lots Payment Status
+    if (lotIds.length > 0) {
+      await inventoryLotsModel.updateMany(
+        { _id: { $in: lotIds } },
+        { $set: { payment_status: "paid" } },
+        { session }
+      );
+    }
+
+    // 5. Create Income record for Discount (Business Profit)
+    if ((Number(discountReceived) || 0) > 0) {
+      const incomeData = {
+        sellDate: new Date(date),
+        information: {
+          saleId: "SETTLEMENT_DISCOUNT",
+          lots_Ids: lotIds,
+        },
+        total_Sell: 0,
+        lot_Commission: 0,
+        customer_Commission: 0,
+        total_Income: Number(discountReceived),
+        received_amount: 0,
+        due: 0,
+      };
+      const income = new incomeModel(incomeData);
+      await income.save({ session });
+    }
+
+    // 6. Record Payment History
+    const paymentRecord = new Payment({
+      date: new Date(date),
+      supplierId,
+      selected_lots_info: unpaidLots.map((lot) => ({
+        lot_id: lot._id,
+        total_sell: lot.sales?.totalSoldPrice || 0,
+        profit: lot.profits?.lotProfit || 0,
+        paid_amount: 0,
+      })),
+      payment_method,
+      payable_amount: totalReduction, // Total amount cleared
+      amount_from_balance: balanceToUse,
+      total_paid_amount: Number(actuallyPaidAmount) || 0,
+      discount_received: Number(discountReceived) || 0,
+      transactionId:
+        transactionId ||
+        `SETTLE-${Date.now()}-${Math.floor(Math.random() * 1000)}`, // Avoid duplicate null keys
+      note: note || "Full settlement of stock out lots",
+    });
+    await paymentRecord.save({ session });
+
+    // 7. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      success: true,
+      message: "Supplier settlement completed successfully",
+      payment: paymentRecord,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Settlement failed:", error);
+    throw new Error(error.message || "Failed to complete settlement");
+  }
 };

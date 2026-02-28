@@ -127,3 +127,35 @@ export const getLotSummaryController = async (req, res, next) => {
     next(err);
   }
 };
+
+// @desc    Delete a sale and revert all changes
+// @route   DELETE /api/v1/sale/:id
+// @access  Admin
+export const deleteSaleController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const result = await saleService.deleteSale(id);
+
+    // Log activity
+    await logActivity({
+      model_name: "Sale",
+      logs_fields_id: id,
+      by: userId,
+      action: "Deleted",
+      note: `Sale ${id} deleted and all changes reverted`,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    console.error("Error in deleteSale:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete sale",
+    });
+  }
+};

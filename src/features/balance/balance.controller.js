@@ -98,6 +98,41 @@ export const getAllBalances = async (req, res) => {
   }
 };
 
+// @desc    Give customer discount
+// @route   POST /api/v1/balances/apply-customer-discount
+// @access  Admin
+export const applyCustomerDiscount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const discount = await balanceService.applyCustomerDiscountService(
+      req.body
+    );
+
+    const customer = await customerModel
+      .findById(discount.balance_for)
+      .select("basic_info.name");
+
+    const customerName = customer?.basic_info?.name;
+
+    // Log activity
+    await logActivity({
+      model_name: "Balance",
+      logs_fields_id: discount._id,
+      by: userId,
+      action: "Created",
+      note: `Customer Discount of ${discount.amount} given to ${customerName}. Due adjusted.`,
+    });
+
+    res.status(201).json({
+      message: "Customer discount applied and due adjusted successfully",
+      data: discount,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // @desc    Get balance details by ID
 // @route   GET /api/v1/balances/details/:id
 // @access  Admin

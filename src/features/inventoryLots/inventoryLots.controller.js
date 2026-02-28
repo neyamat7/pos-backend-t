@@ -138,9 +138,10 @@ export const getUnpaidAndOutOfStockLots = async (req, res) => {
 export const getUnpaidAndOutOfStockLotsBySupplier = async (req, res, next) => {
   try {
     const { supplierId } = req.params;
-    const lots = await inventoryLotsService.getUnpaidAndOutOfStockLotsBySupplier(
-      supplierId
-    );
+    const lots =
+      await inventoryLotsService.getUnpaidAndOutOfStockLotsBySupplier(
+        supplierId
+      );
     res.status(200).json({
       success: true,
       count: lots.length,
@@ -171,6 +172,31 @@ export const adjustStockController = async (req, res) => {
   } catch (error) {
     res.status(400).json({
       message: error.message || "Failed to adjust stock",
+    });
+  }
+};
+
+// @desc    Update lot cost price retroactively
+// @route   PATCH /api/v1/inventoryLots/:lotId/cost
+// @access  Admin
+export const updateLotCostController = async (req, res) => {
+  try {
+    const { lotId } = req.params;
+    const { unitCost } = req.body;
+
+    if (!unitCost || isNaN(unitCost)) {
+      return res.status(400).json({ message: "Valid unit cost is required" });
+    }
+
+    const result = await inventoryLotsService.updateLotCostService(
+      lotId,
+      unitCost
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({
+      message: error.message || "Failed to update lot cost",
     });
   }
 };
@@ -251,7 +277,7 @@ export const getLotsAnalyticsController = async (req, res) => {
     res.status(200).json({
       success: true,
       ...result,
-    });        
+    });
   } catch (error) {
     console.error("Analytics error:", error);
     res.status(500).json({
@@ -279,3 +305,40 @@ export const deleteLot = async (req, res) => {
   }
 };
 
+// @desc    Upload lot receipt image
+// @route   POST /api/v1/inventoryLots/:id/receipt
+// @access  Admin
+export const uploadReceiptImage = async (req, res) => {
+  try {
+    const lotId = req.params.id;
+    const image = await inventoryLotsService.addReceiptImageService(
+      lotId,
+      req.file
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Receipt image uploaded successfully",
+      data: image,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Remove lot receipt image
+// @route   DELETE /api/v1/inventoryLots/:id/receipt/:imageId
+// @access  Admin
+export const deleteReceiptImage = async (req, res) => {
+  try {
+    const { id: lotId, imageId } = req.params;
+    const result = await inventoryLotsService.removeReceiptImageService(
+      lotId,
+      imageId
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
