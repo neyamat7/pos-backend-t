@@ -2,6 +2,7 @@ import { logActivity } from "../../utils/activityLogger.js";
 import * as saleService from "./sale.services.js";
 
 // @desc    Create sale record
+// @route   POST /api/v1/sale/add
 // @access  Admin
 export const createSale = async (req, res) => {
   try {

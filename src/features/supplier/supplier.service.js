@@ -4,25 +4,22 @@ import Supplier from "./supplier.model.js";
 // @access Admin
 export const createSupplier = async (data) => {
   // Get all suppliers and find the highest sl value numerically
-  const allSuppliers = await Supplier
-    .find()
-    .select("basic_info.sl")
-    .lean();
+  const allSuppliers = await Supplier.find().select("basic_info.sl").lean();
 
   // Calculate the next sl value by finding the max numeric value
   let nextSl = 1;
-  
+
   if (allSuppliers && allSuppliers.length > 0) {
     // Convert all sl values to numbers and find the maximum
     const slNumbers = allSuppliers
-      .map(supplier => {
+      .map((supplier) => {
         if (supplier.basic_info && supplier.basic_info.sl) {
           const num = parseInt(supplier.basic_info.sl, 10);
           return isNaN(num) ? 0 : num;
         }
         return 0;
       })
-      .filter(num => num > 0);
+      .filter((num) => num > 0);
 
     if (slNumbers.length > 0) {
       const maxSl = Math.max(...slNumbers);
@@ -45,13 +42,17 @@ export const createSupplier = async (data) => {
 
 // @desc Get  all supplier
 // @access Admin
-export const getAllSuppliers = async (page, limit, search = '') => {
+export const getAllSuppliers = async (page, limit, search = "") => {
   const skip = (page - 1) * limit;
 
   // Build search filter - only active suppliers
   const searchFilter = { isActive: true };
   if (search) {
-    searchFilter['basic_info.name'] = { $regex: search, $options: 'i' };
+    const regex = new RegExp(search, "i");
+    searchFilter.$or = [
+      { "basic_info.name": regex },
+      { "contact_info.phone": regex },
+    ];
   }
 
   const total = await Supplier.countDocuments(searchFilter);
@@ -158,7 +159,7 @@ export const updateSupplierDueForStockOut = async ({
   totalSoldAmount,
   lotProfit,
   totalExpenses,
-  session = null
+  session = null,
 }) => {
   // Calculate supplier due amount
   const supplierDueAmount = totalSoldAmount - lotProfit - totalExpenses;
@@ -195,8 +196,8 @@ export const updateSupplierDueForStockOut = async ({
       totalSoldAmount,
       lotProfit,
       totalExpenses,
-      supplierDue: supplierDueAmount
-    }
+      supplierDue: supplierDueAmount,
+    },
   };
 };
 
@@ -207,7 +208,7 @@ export const adjustSupplierDue = async ({
   supplierId,
   previousDueAdded,
   newDueAmount,
-  session = null
+  session = null,
 }) => {
   // Calculate the adjustment (difference between new and old)
   const adjustment = newDueAmount - previousDueAdded;
@@ -244,7 +245,7 @@ export const adjustSupplierDue = async ({
     adjustment,
     previousDueAdded,
     newDueAmount,
-    newSupplierDue
+    newSupplierDue,
   };
 };
 
@@ -312,12 +313,11 @@ export const getArchivedSuppliers = async (page, limit, search) => {
   const query = { isActive: false }; // Only archived suppliers
   if (search) {
     const regex = new RegExp(search, "i");
-    query["basic_info.name"] = regex;
+    query.$or = [{ "basic_info.name": regex }, { "contact_info.phone": regex }];
   }
 
   const total = await Supplier.countDocuments(query);
-  const suppliers = await Supplier
-    .find(query)
+  const suppliers = await Supplier.find(query)
     .skip(skip)
     .limit(limit)
     .sort({ deletedAt: -1 })

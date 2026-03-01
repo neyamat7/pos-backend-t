@@ -161,7 +161,7 @@ export const getAllLots = async (page, limit, search) => {
 
   const lots = await inventoryLotsModel
     .find(query)
-    .populate("productsId", "productName")
+    .populate("productsId", "productName productNameBn")
     .populate("supplierId", "basic_info")
     .populate("purchaseListId", "purchase_date status")
     .populate("receiptImages")
@@ -183,7 +183,7 @@ export const getAllLots = async (page, limit, search) => {
 export const getLotById = async (lotId) => {
   const lot = await inventoryLotsModel
     .findById(lotId)
-    .populate("productsId", "productName description")
+    .populate("productsId", "productName productNameBn description")
     .populate("supplierId", "name email")
     .populate("purchaseListId", "purchase_date status");
 
@@ -233,13 +233,28 @@ export const getAllLotsBySupplier = async (
             ? [
                 {
                   $match: {
-                    productName: { $regex: filters.search, $options: "i" },
+                    $or: [
+                      {
+                        productName: { $regex: filters.search, $options: "i" },
+                      },
+                      {
+                        productNameBn: {
+                          $regex: filters.search,
+                          $options: "i",
+                        },
+                      },
+                    ],
                   },
                 },
               ]
             : []),
           {
-            $project: { productName: 1, description: 1, createdAt: 1 },
+            $project: {
+              productName: 1,
+              productNameBn: 1,
+              description: 1,
+              createdAt: 1,
+            },
           },
         ],
       },
@@ -329,19 +344,51 @@ export const getAllLotsBySupplier = async (
         ? [aggregationPipeline[1], aggregationPipeline[2]]
         : [aggregationPipeline[1]]),
       {
-        $group: {
-          _id: null,
-          totalCratesSold: {
-            $sum: {
-              $add: [
-                { $ifNull: ["$sales.totalCrateType1Sold", 0] },
-                { $ifNull: ["$sales.totalCrateType2Sold", 0] },
-              ],
+        $unwind: { path: "$productsId", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $facet: {
+          grandTotals: [
+            {
+              $group: {
+                _id: null,
+                totalCratesSold: {
+                  $sum: {
+                    $add: [
+                      { $ifNull: ["$sales.totalCrateType1Sold", 0] },
+                      { $ifNull: ["$sales.totalCrateType2Sold", 0] },
+                    ],
+                  },
+                },
+                totalBoxesSold: { $sum: "$sales.totalBoxSold" },
+                totalPiecesSold: { $sum: "$sales.totalPieceSold" },
+                totalKgSold: { $sum: "$sales.totalKgSold" },
+                totalSoldAmount: { $sum: "$sales.totalSoldPrice" },
+              },
             },
-          },
-          totalBoxesSold: { $sum: "$sales.totalBoxSold" },
-          totalPiecesSold: { $sum: "$sales.totalPieceSold" },
-          totalSoldAmount: { $sum: "$sales.totalSoldPrice" },
+          ],
+          productBreakdown: [
+            {
+              $group: {
+                _id: "$productsId._id",
+                productName: { $first: "$productsId.productName" },
+                productNameBn: { $first: "$productsId.productNameBn" },
+                totalCrates: {
+                  $sum: {
+                    $add: [
+                      { $ifNull: ["$sales.totalCrateType1Sold", 0] },
+                      { $ifNull: ["$sales.totalCrateType2Sold", 0] },
+                    ],
+                  },
+                },
+                totalBoxes: { $sum: "$sales.totalBoxSold" },
+                totalPieces: { $sum: "$sales.totalPieceSold" },
+                totalKg: { $sum: "$sales.totalKgSold" },
+                amount: { $sum: "$sales.totalSoldPrice" },
+              },
+            },
+            { $sort: { amount: -1 } },
+          ],
         },
       },
     ]);
@@ -353,16 +400,26 @@ export const getAllLotsBySupplier = async (
     const supplierDue = supplier?.account_info?.due || 0;
 
     // Extract summary data
-    summary = summaryResult[0] || {
-      totalCratesSold: 0,
-      totalBoxesSold: 0,
-      totalPiecesSold: 0,
-      totalSoldAmount: 0,
-    };
-    delete summary._id; // Remove the _id field from summary
+    // Extract summary data
+    const grandTotals = summaryResult[0]?.grandTotals[0] || {};
+    const productBreakdown = summaryResult[0]?.productBreakdown || [];
 
-    // Add supplier due to summary
-    summary.supplierDue = supplierDue;
+    summary = {
+      totalCratesSold: grandTotals.totalCratesSold || 0,
+      totalBoxesSold: grandTotals.totalBoxesSold || 0,
+      totalPiecesSold: grandTotals.totalPiecesSold || 0,
+      totalKgSold: grandTotals.totalKgSold || 0,
+      totalSoldAmount: grandTotals.totalSoldAmount || 0,
+      productBreakdown: productBreakdown.filter(
+        (p) =>
+          p.amount > 0 ||
+          p.totalKg > 0 ||
+          p.totalCrates > 0 ||
+          p.totalBoxes > 0 ||
+          p.totalPieces > 0
+      ), // Clean up zero values
+      supplierDue: supplierDue,
+    };
   }
 
   return {
@@ -451,7 +508,7 @@ export const getAllInStockLots = async () => {
   const lots = await inventoryLotsModel
     .find({ status: "in stock" })
     .sort({ createdAt: -1 })
-    .populate("productsId", "productName")
+    .populate("productsId", "productName productNameBn")
     .populate("supplierId", "basic_info.name")
     .populate("purchaseListId", "purchase_date");
 

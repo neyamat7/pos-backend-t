@@ -45,11 +45,14 @@ export const createSale = async (saleData) => {
 
     // Update due (add due_amount)
     const dueAmount = Number(saleData.payment_details?.due_amount) || 0;
-    updates["account_info.due"] = (Number(customer.account_info?.due) || 0) + dueAmount;
+    updates["account_info.due"] =
+      (Number(customer.account_info?.due) || 0) + dueAmount;
 
     // Update crates
-    const newCrateType1 = (Number(customer.crate_info?.type_1) || 0) + totalCrateType1;
-    const newCrateType2 = (Number(customer.crate_info?.type_2) || 0) + totalCrateType2;
+    const newCrateType1 =
+      (Number(customer.crate_info?.type_1) || 0) + totalCrateType1;
+    const newCrateType2 =
+      (Number(customer.crate_info?.type_2) || 0) + totalCrateType2;
 
     updates["crate_info.type_1"] = newCrateType1;
     updates["crate_info.type_2"] = newCrateType2;
@@ -83,36 +86,51 @@ export const createSale = async (saleData) => {
           }
 
           newStatus =
-            Number(inventoryLot.remaining_boxes) - Number(lot.box_quantity) === 0
+            Number(inventoryLot.remaining_boxes) - Number(lot.box_quantity) ===
+            0
               ? "stock out"
               : "in stock";
         }
 
         // for check piece quantity and update status
         if (lot.isPieced || Number(lot.piece_quantity) > 0) {
-          if (Number(inventoryLot.remaining_pieces) < Number(lot.piece_quantity)) {
+          if (
+            Number(inventoryLot.remaining_pieces) < Number(lot.piece_quantity)
+          ) {
             throw new Error(`Not enough pieces in lot: ${lot.lot_name}`);
           }
 
           newStatus =
-            Number(inventoryLot.remaining_pieces) - Number(lot.piece_quantity) === 0
+            Number(inventoryLot.remaining_pieces) -
+              Number(lot.piece_quantity) ===
+            0
               ? "stock out"
               : "in stock";
         }
 
         // for check crate quantity and update status
         if (Number(lot.crate_type1) > 0 || Number(lot.crate_type2) > 0) {
-          if (Number(inventoryLot.carat.remaining_crate_Type_1) < Number(lot.crate_type1)) {
+          if (
+            Number(inventoryLot.carat.remaining_crate_Type_1) <
+            Number(lot.crate_type1)
+          ) {
             throw new Error(`Not enough crate in lot: ${lot.lot_name}`);
           }
 
-          if (Number(inventoryLot.carat.remaining_crate_Type_2) < Number(lot.crate_type2)) {
+          if (
+            Number(inventoryLot.carat.remaining_crate_Type_2) <
+            Number(lot.crate_type2)
+          ) {
             throw new Error(`Not enough crate in lot: ${lot.lot_name}`);
           }
 
           newStatus =
-            Number(inventoryLot.carat.remaining_crate_Type_1) - Number(lot.crate_type1) === 0 &&
-            Number(inventoryLot.carat.remaining_crate_Type_2) - Number(lot.crate_type2) === 0
+            Number(inventoryLot.carat.remaining_crate_Type_1) -
+              Number(lot.crate_type1) ===
+              0 &&
+            Number(inventoryLot.carat.remaining_crate_Type_2) -
+              Number(lot.crate_type2) ===
+              0
               ? "stock out"
               : "in stock";
         }
@@ -130,38 +148,50 @@ export const createSale = async (saleData) => {
 
         // customerProfit depends on commission status
         const customerProfit = inventoryLot.hasCommission
-          ? (Number(lot.customer_commission_amount) || 0)  // Commission lot: use customer commission
-          : lotProfit;                                      // Non-commission lot: use lot profit
+          ? Number(lot.customer_commission_amount) || 0 // Commission lot: use customer commission
+          : lotProfit; // Non-commission lot: use lot profit
 
-        const totalProfit = lotProfit + (Number(lot.lot_commission_amount) || 0);
-       
+        const totalProfit =
+          lotProfit + (Number(lot.lot_commission_amount) || 0);
 
         // Prepare lot updates
         const lotUpdates = {
           // Increment sales
-          "sales.totalKgSold": (Number(inventoryLot.sales?.totalKgSold) || 0) + kgSold,
-          "sales.totalBoxSold": (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
-          "sales.totalPieceSold": (Number(inventoryLot.sales?.totalPieceSold) || 0) + pieceSold,
-          "sales.totalCrateType1Sold": (Number(inventoryLot.sales?.totalCrateType1Sold) || 0) + crateType1Sold,
-          "sales.totalCrateType2Sold": (Number(inventoryLot.sales?.totalCrateType2Sold) || 0) + crateType2Sold,
-          "sales.totalSoldPrice": (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
+          "sales.totalKgSold":
+            (Number(inventoryLot.sales?.totalKgSold) || 0) + kgSold,
+          "sales.totalBoxSold":
+            (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
+          "sales.totalPieceSold":
+            (Number(inventoryLot.sales?.totalPieceSold) || 0) + pieceSold,
+          "sales.totalCrateType1Sold":
+            (Number(inventoryLot.sales?.totalCrateType1Sold) || 0) +
+            crateType1Sold,
+          "sales.totalCrateType2Sold":
+            (Number(inventoryLot.sales?.totalCrateType2Sold) || 0) +
+            crateType2Sold,
+          "sales.totalSoldPrice":
+            (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
 
           // Increment profits (lotProfit only for commission-based lots)
           "profits.lotProfit": inventoryLot.hasCommission
             ? (Number(inventoryLot.profits?.lotProfit) || 0) + lotCommission
-            : (Number(inventoryLot.profits?.lotProfit) || 0),
+            : Number(inventoryLot.profits?.lotProfit) || 0,
           "profits.customerProfit":
-            (Number(inventoryLot.profits?.customerProfit) || 0) + customerProfit,
+            (Number(inventoryLot.profits?.customerProfit) || 0) +
+            customerProfit,
           "profits.totalProfit":
-            (Number(inventoryLot.profits?.totalProfit) || 0) +
-            totalProfit,
-          remaining_boxes: (Number(inventoryLot.remaining_boxes) || 0) - boxSold,
-          remaining_pieces: (Number(inventoryLot.remaining_pieces) || 0) - pieceSold,
+            (Number(inventoryLot.profits?.totalProfit) || 0) + totalProfit,
+          remaining_boxes:
+            (Number(inventoryLot.remaining_boxes) || 0) - boxSold,
+          remaining_pieces:
+            (Number(inventoryLot.remaining_pieces) || 0) - pieceSold,
 
           "carat.remaining_crate_Type_1":
-            Number(inventoryLot.carat.remaining_crate_Type_1) - (Number(lot.crate_type1) || 0),
+            Number(inventoryLot.carat.remaining_crate_Type_1) -
+            (Number(lot.crate_type1) || 0),
           "carat.remaining_crate_Type_2":
-            Number(inventoryLot.carat.remaining_crate_Type_2) - (Number(lot.crate_type2) || 0),
+            Number(inventoryLot.carat.remaining_crate_Type_2) -
+            (Number(lot.crate_type2) || 0),
 
           status: newStatus,
         };
@@ -172,11 +202,14 @@ export const createSale = async (saleData) => {
             ...inventoryLot.toObject(),
             sales: {
               ...inventoryLot.sales,
-              totalKgSold: (Number(inventoryLot.sales?.totalKgSold) || 0) + kgSold,
-              totalBoxSold: (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
+              totalKgSold:
+                (Number(inventoryLot.sales?.totalKgSold) || 0) + kgSold,
+              totalBoxSold:
+                (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
               totalPieceSold:
                 (Number(inventoryLot.sales?.totalPieceSold) || 0) + pieceSold,
-              totalSoldPrice: (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
+              totalSoldPrice:
+                (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
             },
           };
           const { loss, customerProfit: finalCustomerProfit } =
@@ -192,16 +225,18 @@ export const createSale = async (saleData) => {
 
           // Update supplier due when lot goes stock out
           // Using reusable function from supplier.service.js
-          const totalSoldAmount = (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice;
+          const totalSoldAmount =
+            (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice;
           const lotProfit = Number(inventoryLot.profits?.lotProfit) || 0;
-          const totalExpenses = Number(inventoryLot.expenses?.total_expenses) || 0;
+          const totalExpenses =
+            Number(inventoryLot.expenses?.total_expenses) || 0;
 
           const result = await updateSupplierDueForStockOut({
             supplierId: inventoryLot.supplierId,
             totalSoldAmount,
             lotProfit,
             totalExpenses,
-            session
+            session,
           });
 
           // Store the supplier due amount in the lot for future adjustments
@@ -309,7 +344,6 @@ export const getAllSales = async (search, page, limit) => {
       { $sort: { createdAt: -1 } },
     ];
   } else {
-
     // Pipeline without search
     pipeline = [{ $sort: { createdAt: -1 } }];
   }
@@ -329,7 +363,8 @@ export const getAllSales = async (search, page, limit) => {
   sales = await Sale.populate(sales, [
     {
       path: "customerId",
-      select: "basic_info.name contact_info.phone contact_info.email contact_info.location",
+      select:
+        "basic_info.name contact_info.phone contact_info.email contact_info.location",
     },
     {
       path: "items.productId",
@@ -378,10 +413,10 @@ export const getAllSalesByCustomer = async (
             $match: {
               sale_date: {
                 ...(filters.fromDate && {
-                  $gte: new Date(filters.fromDate).toISOString().split('T')[0],
+                  $gte: new Date(filters.fromDate).toISOString().split("T")[0],
                 }),
                 ...(filters.toDate && {
-                  $lte: new Date(filters.toDate).toISOString().split('T')[0],
+                  $lte: new Date(filters.toDate).toISOString().split("T")[0],
                 }),
               },
             },
@@ -405,7 +440,17 @@ export const getAllSalesByCustomer = async (
             ? [
                 {
                   $match: {
-                    productName: { $regex: filters.search, $options: "i" },
+                    $or: [
+                      {
+                        productName: { $regex: filters.search, $options: "i" },
+                      },
+                      {
+                        productNameBn: {
+                          $regex: filters.search,
+                          $options: "i",
+                        },
+                      },
+                    ],
                   },
                 },
               ]
@@ -859,18 +904,16 @@ export const deleteSale = async (saleId) => {
               const currentSupplierDue =
                 Number(supplier.account_info?.due) || 0;
 
-              await mongoose
-                .model("Supplier")
-                .findByIdAndUpdate(
-                  inventoryLot.supplierId,
-                  {
-                    $set: {
-                      "account_info.due":
-                        currentSupplierDue - supplierDueToRevert,
-                    },
+              await mongoose.model("Supplier").findByIdAndUpdate(
+                inventoryLot.supplierId,
+                {
+                  $set: {
+                    "account_info.due":
+                      currentSupplierDue - supplierDueToRevert,
                   },
-                  { session, new: true }
-                );
+                },
+                { session, new: true }
+              );
             }
           }
         }

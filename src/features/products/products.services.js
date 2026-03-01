@@ -6,7 +6,10 @@ export const getAllProducts = async (page, limit, search) => {
 
   const query = { isDeleted: { $ne: true } };
   if (search) {
-    query.productName = { $regex: search, $options: "i" };
+    query.$or = [
+      { productName: { $regex: search, $options: "i" } },
+      { productNameBn: { $regex: search, $options: "i" } },
+    ];
   }
 
   const total = await Product.countDocuments(query);
