@@ -12,7 +12,7 @@ import inventoryLotsModel from "./inventoryLots.model.js";
 
 // @desc create lost from purchase list also update crate in supplier profile
 // @access  Admin
-export const createLotsForPurchase = async (purchaseId) => {
+export const createLotsForPurchase = async (purchaseId, userId = null) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -24,6 +24,7 @@ export const createLotsForPurchase = async (purchaseId) => {
       throw new Error("Lots already created for this purchase");
 
     const lotsToCreate = [];
+    const expensesToCreate = [];
 
     // Loop over suppliers
     for (const item of purchase.items) {
@@ -40,10 +41,10 @@ export const createLotsForPurchase = async (purchaseId) => {
         needToGiveCrate2 = 0,
       } = supplier.crate_info;
 
+      let currentSupplierDueAdjustment = 0;
+
       // Loop over lots for this supplier
       for (const lot of item.lots) {
-        // console.log('lot in create lot', lot);
-
         // Check duplicate lot
         const existingLot = await inventoryLotsModel
           .findOne({ lot_name: lot.lot_name })
@@ -51,11 +52,64 @@ export const createLotsForPurchase = async (purchaseId) => {
         if (existingLot)
           throw new Error(`Lot name "${lot.lot_name}" already exists`);
 
+        // Generate lot ID early so we can use it in expense reference
+        const lotId = new mongoose.Types.ObjectId();
+
+        const lotTotalExpenses =
+          lot.expenses.labour +
+          lot.expenses.transportation +
+          lot.expenses.van_vara +
+          lot.expenses.moshjid +
+          lot.expenses.trading_post +
+          lot.expenses.other_expenses +
+          (lot.expenses.extra_expense || 0) +
+          (lot.expenses.custom_expenses?.reduce(
+            (sum, item) => sum + (item.amount || 0),
+            0
+          ) || 0);
+
+        const product = await productModel
+          .findById(lot.productId)
+          .session(session);
+
+        const isNonCommission =
+          !product?.allowCommission && (lot.commission_rate || 0) === 0;
+
+        let supplierDueAdded = 0;
+        if (isNonCommission) {
+          // Rule: Supplier gets FULL purchase price
+          let lotPurchaseAmount = 0;
+          if (lot.isBoxed) {
+            lotPurchaseAmount = (lot.box_quantity || 0) * (lot.unit_Cost || 0);
+          } else if (lot.isPieced) {
+            lotPurchaseAmount =
+              (lot.piece_quantity || 0) * (lot.unit_Cost || 0);
+          }
+          // Note for fixed-price purchase: total kg/amount is agreed upfront.
+
+          supplierDueAdded = lotPurchaseAmount;
+          currentSupplierDueAdjustment += supplierDueAdded;
+
+          // Rule: Expenses go to store expenses collection
+          if (lotTotalExpenses > 0) {
+            expensesToCreate.push({
+              date: purchase.purchase_date.toISOString().split("T")[0],
+              amount: lotTotalExpenses,
+              expense_category: "Purchase Expenses",
+              expense_for: `Lot Procurement: ${lot.lot_name}`,
+              payment_type: "cash",
+              reference_num: lotId.toString(),
+              expense_by: userId, // Passed from controller
+            });
+          }
+        }
+
         lotsToCreate.push({
+          _id: lotId,
           lot_name: lot.lot_name,
           purchase_date: purchase.purchase_date,
           status: "in stock",
-          hasCommission: lot.commission_rate > 0,
+          hasCommission: !isNonCommission,
           isCrated: lot.isCrated,
           isBoxed: lot.isBoxed,
           isPieced: lot.isPieced,
@@ -76,7 +130,6 @@ export const createLotsForPurchase = async (purchaseId) => {
             unitCost: lot.unit_Cost,
             commissionRate: lot.commission_rate || 0,
           },
-
           expenses: {
             labour: lot.expenses.labour,
             transportation: lot.expenses.transportation,
@@ -87,19 +140,9 @@ export const createLotsForPurchase = async (purchaseId) => {
             custom_expenses: lot.expenses.custom_expenses || [],
             extra_expense: lot.expenses.extra_expense || 0,
             extra_expense_note: lot.expenses.extra_expense_note || "",
-            total_expenses:
-              lot.expenses.labour +
-              lot.expenses.transportation +
-              lot.expenses.van_vara +
-              lot.expenses.moshjid +
-              lot.expenses.trading_post +
-              lot.expenses.other_expenses +
-              (lot.expenses.extra_expense || 0) +
-              (lot.expenses.custom_expenses?.reduce(
-                (sum, item) => sum + (item.amount || 0),
-                0
-              ) || 0),
+            total_expenses: lotTotalExpenses,
           },
+          supplierDueAdded: supplierDueAdded,
         });
 
         // Deduct crate per lot (Type 1)
@@ -119,7 +162,10 @@ export const createLotsForPurchase = async (purchaseId) => {
         }
       }
 
-      // Update supplier crate info
+      // Update supplier crate info and due balance
+      const currentSupplierDue = Number(supplier.account_info?.due) || 0;
+      supplier.account_info.due =
+        currentSupplierDue + currentSupplierDueAdjustment;
       supplier.crate_info.crate1 = crate1;
       supplier.crate_info.crate2 = crate2;
       supplier.crate_info.needToGiveCrate1 = needToGiveCrate1;
@@ -131,6 +177,11 @@ export const createLotsForPurchase = async (purchaseId) => {
     // Insert all lots
     await inventoryLotsModel.insertMany(lotsToCreate, { session });
 
+    // Insert all expenses
+    if (expensesToCreate.length > 0) {
+      await Expense.insertMany(expensesToCreate, { session });
+    }
+
     // Mark purchase as lots created
     purchase.is_lots_created = true;
     await purchase.save({ session });
@@ -139,7 +190,7 @@ export const createLotsForPurchase = async (purchaseId) => {
     await session.commitTransaction();
     session.endSession();
 
-    return { success: true, createdLots: lotsToCreate.length };
+    return lotsToCreate.length;
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -967,10 +1018,22 @@ export const deleteLotService = async (lotId) => {
       }
     }
 
-    // 6. Save Supplier Changes
+    // 6. Revert Supplier Due (if any added during purchase or sale)
+    const dueToRevert = lot.supplierDueAdded || 0;
+    if (dueToRevert !== 0) {
+      const currentSupplierDue = Number(supplier.account_info?.due) || 0;
+      supplier.account_info.due = currentSupplierDue - dueToRevert;
+    }
+
+    // 7. Delete linked Store Expenses (created for non-commission lots)
+    await Expense.deleteMany({ reference_num: lotId.toString() }).session(
+      session
+    );
+
+    // 8. Save Supplier Changes
     await supplier.save({ session });
 
-    // 7. Delete the Lot
+    // 9. Delete the Lot
     await lot.deleteOne({ session });
 
     await session.commitTransaction();

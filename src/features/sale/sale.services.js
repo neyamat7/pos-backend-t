@@ -223,24 +223,29 @@ export const createSale = async (saleData) => {
             lotUpdates["profits.totalProfit"] = finalCustomerProfit;
           }
 
-          // Update supplier due when lot goes stock out
-          // Using reusable function from supplier.service.js
-          const totalSoldAmount =
-            (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice;
-          const lotProfit = Number(inventoryLot.profits?.lotProfit) || 0;
-          const totalExpenses =
-            Number(inventoryLot.expenses?.total_expenses) || 0;
+          // Update supplier due when lot goes stock out (only if not already credited at purchase)
+          if ((inventoryLot.supplierDueAdded || 0) === 0) {
+            const totalSoldAmount =
+              (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice;
+            const lotProfit = Number(inventoryLot.profits?.lotProfit) || 0;
+            const totalExpenses =
+              Number(inventoryLot.expenses?.total_expenses) || 0;
 
-          const result = await updateSupplierDueForStockOut({
-            supplierId: inventoryLot.supplierId,
-            totalSoldAmount,
-            lotProfit,
-            totalExpenses,
-            session,
-          });
+            const result = await updateSupplierDueForStockOut({
+              supplierId: inventoryLot.supplierId,
+              totalSoldAmount,
+              lotProfit,
+              totalExpenses,
+              session,
+            });
 
-          // Store the supplier due amount in the lot for future adjustments
-          lotUpdates["supplierDueAdded"] = result.supplierDueAmount;
+            // Store the supplier due amount in the lot for future adjustments
+            lotUpdates["supplierDueAdded"] = result.supplierDueAmount;
+          } else {
+            // Supplier already credited at purchase time
+            // Stay with the current purchase-time value
+            lotUpdates["supplierDueAdded"] = inventoryLot.supplierDueAdded;
+          }
         }
 
         // Apply updates to inventory lot

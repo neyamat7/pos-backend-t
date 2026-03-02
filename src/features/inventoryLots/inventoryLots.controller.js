@@ -7,8 +7,10 @@ export const createLots = async (req, res) => {
   try {
     const purchaseId = req.query.id;
 
-    const lotsCreatedCount =
-      await inventoryLotsService.createLotsForPurchase(purchaseId);
+    const lotsCreatedCount = await inventoryLotsService.createLotsForPurchase(
+      purchaseId,
+      req.user?.id
+    );
 
     return res.status(200).json({
       success: true,
