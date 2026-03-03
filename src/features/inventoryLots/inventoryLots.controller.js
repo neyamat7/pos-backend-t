@@ -7,9 +7,12 @@ export const createLots = async (req, res) => {
   try {
     const purchaseId = req.query.id;
 
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) throw new Error("Authenticated user not found");
+
     const lotsCreatedCount = await inventoryLotsService.createLotsForPurchase(
       purchaseId,
-      req.user?.id
+      userId
     );
 
     return res.status(200).json({

@@ -1,16 +1,16 @@
 import express from "express";
 import { authMiddleware } from "../../middleware/auth.js";
 import {
-    createCustomer,
-    getAllCustomers,
-    getArchivedCustomers,
-    getCustomerById,
-    getCustomersByQuery,
-    getDueCustomersController,
-    restoreCustomer,
-    softDeleteCustomer,
-    toggleCustomerPin,
-    updateCustomer
+  createCustomer,
+  getAllCustomers,
+  getArchivedCustomers,
+  getCustomerById,
+  getCustomersByQuery,
+  getDueCustomersController,
+  restoreCustomer,
+  softDeleteCustomer,
+  toggleCustomerPin,
+  updateCustomer,
 } from "./customer.controller.js";
 
 const router = express.Router();
@@ -33,15 +33,15 @@ router.get("/details/:id", getCustomerById);
 router.get("/due-list", getDueCustomersController);
 
 // Soft delete (archive)
-router.delete("/delete/:id", softDeleteCustomer);
+router.delete("/delete/:id", authMiddleware, softDeleteCustomer);
 
 // Restore from archive
-router.patch("/restore/:id", restoreCustomer);
+router.patch("/restore/:id", authMiddleware, restoreCustomer);
 
 // Toggle pin status
 router.patch("/pin/:id", authMiddleware, toggleCustomerPin);
 
 // Get archived list
-router.get("/archived", getArchivedCustomers);
+router.get("/archived", authMiddleware, getArchivedCustomers);
 
 export default router;

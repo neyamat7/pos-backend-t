@@ -10,6 +10,12 @@ export const createBalance = async (data) => {
   session.startTransaction();
 
   try {
+    // Generate unique transaction ID if not provided
+    if (!data.transaction_Id) {
+      const prefix = data.role === "customer" ? "C-TXN" : "S-TXN";
+      data.transaction_Id = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    }
+
     // Create balance
     const balance = new Balance(data);
     const savedBalance = await balance.save({ session });
@@ -132,6 +138,11 @@ export const addCustomerBalanceService = async (data) => {
     }
 
     // 3. Create balance record
+    // Generate unique transaction ID if not provided
+    if (!data.transaction_Id) {
+      data.transaction_Id = `C-TXN-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    }
+
     const balance = new Balance({
       ...data,
       role: "customer",

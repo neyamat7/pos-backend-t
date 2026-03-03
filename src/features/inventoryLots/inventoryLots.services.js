@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 import Balance from "../balance/balance.model.js";
+import Expense from "../expense/expense.model.js";
 import { getTotalExpensesByMonth } from "../expense/expense.service.js";
 import Image from "../image/image.model.js";
 import { getTotalCrateProfitByMonth } from "../inventoryCrate/inventoryCrate.services.js";
 import Payment from "../payment/payment.model.js";
+import productModel from "../products/products.model.js";
 import purchaseModel from "../purchase/purchase.model.js";
 import saleModel from "../sale/sale.model.js";
 import supplierModel from "../supplier/supplier.model.js";

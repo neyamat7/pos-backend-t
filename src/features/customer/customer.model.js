@@ -29,7 +29,6 @@ const customerSchema = new mongoose.Schema(
     contact_info: {
       email: {
         type: String,
-        required: true,
         trim: true,
         lowercase: true,
       },
@@ -100,7 +99,7 @@ const customerSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    
+
     deletedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

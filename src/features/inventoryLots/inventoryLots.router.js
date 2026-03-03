@@ -19,10 +19,12 @@ import {
   uploadReceiptImage,
 } from "./inventoryLots.controller.js";
 
+import { authMiddleware } from "../../middleware/auth.js";
+
 const router = express.Router();
 
 // Create new lots
-router.post("/add", createLots);
+router.post("/add", authMiddleware, createLots);
 
 // get all
 router.get("/all", fetchAllLots);
