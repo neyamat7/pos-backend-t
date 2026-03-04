@@ -6,9 +6,10 @@ export const getAllProducts = async (page, limit, search) => {
 
   const query = { isDeleted: { $ne: true } };
   if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.$or = [
-      { productName: { $regex: search, $options: "i" } },
-      { productNameBn: { $regex: search, $options: "i" } },
+      { productName: { $regex: escapedSearch, $options: "i" } },
+      { productNameBn: { $regex: escapedSearch, $options: "i" } },
     ];
   }
 
