@@ -55,6 +55,11 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
 
+    isBagged: {
+      type: Boolean,
+      default: false,
+    },
+
     is_discountable: {
       type: Boolean,
       default: false,

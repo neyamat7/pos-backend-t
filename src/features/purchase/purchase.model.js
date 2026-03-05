@@ -61,6 +61,10 @@ const purchaseSchema = new mongoose.Schema(
               type: Boolean,
               default: false,
             },
+            isBagged: {
+              type: Boolean,
+              default: false,
+            },
 
             // Carat Details
             carat: {
@@ -80,6 +84,16 @@ const purchaseSchema = new mongoose.Schema(
             },
 
             piece_quantity: {
+              type: Number,
+              default: 0,
+            },
+
+            bag_quantity: {
+              type: Number,
+              default: 0,
+            },
+
+            total_kg: {
               type: Number,
               default: 0,
             },

@@ -108,6 +108,18 @@ export const createSale = async (saleData) => {
               : "in stock";
         }
 
+        // for check bag quantity and update status
+        if (lot.isBagged || Number(lot.bag_quantity) > 0) {
+          if (Number(inventoryLot.remaining_bags) < Number(lot.bag_quantity)) {
+            throw new Error(`Not enough bags in lot: ${lot.lot_name}`);
+          }
+
+          newStatus =
+            Number(inventoryLot.remaining_bags) - Number(lot.bag_quantity) === 0
+              ? "stock out"
+              : "in stock";
+        }
+
         // for check crate quantity and update status
         if (Number(lot.crate_type1) > 0 || Number(lot.crate_type2) > 0) {
           if (
@@ -138,6 +150,7 @@ export const createSale = async (saleData) => {
         // Calculate increments for this lot
         const kgSold = Number(lot.kg) || 0;
         const boxSold = Number(lot.box_quantity) || 0;
+        const bagSold = Number(lot.bag_quantity) || 0;
         const pieceSold = Number(lot.piece_quantity) || 0;
         const crateType1Sold = Number(lot.crate_type1) || 0;
         const crateType2Sold = Number(lot.crate_type2) || 0;
@@ -161,6 +174,8 @@ export const createSale = async (saleData) => {
             (Number(inventoryLot.sales?.totalKgSold) || 0) + kgSold,
           "sales.totalBoxSold":
             (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
+          "sales.totalBagSold":
+            (Number(inventoryLot.sales?.totalBagSold) || 0) + bagSold,
           "sales.totalPieceSold":
             (Number(inventoryLot.sales?.totalPieceSold) || 0) + pieceSold,
           "sales.totalCrateType1Sold":
@@ -183,6 +198,8 @@ export const createSale = async (saleData) => {
             (Number(inventoryLot.profits?.totalProfit) || 0) + totalProfit,
           remaining_boxes:
             (Number(inventoryLot.remaining_boxes) || 0) - boxSold,
+          remaining_bags: (Number(inventoryLot.remaining_bags) || 0) - bagSold,
+          remaining_kg: (Number(inventoryLot.remaining_kg) || 0) - kgSold,
           remaining_pieces:
             (Number(inventoryLot.remaining_pieces) || 0) - pieceSold,
 
@@ -208,6 +225,8 @@ export const createSale = async (saleData) => {
                 (Number(inventoryLot.sales?.totalBoxSold) || 0) + boxSold,
               totalPieceSold:
                 (Number(inventoryLot.sales?.totalPieceSold) || 0) + pieceSold,
+              totalBagSold:
+                (Number(inventoryLot.sales?.totalBagSold) || 0) + bagSold,
               totalSoldPrice:
                 (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice,
             },

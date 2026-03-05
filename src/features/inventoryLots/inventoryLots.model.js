@@ -42,6 +42,10 @@ const inventoryLotsSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isBagged: {
+      type: Boolean,
+      default: false,
+    },
 
     // Relations
     productsId: {
@@ -102,6 +106,26 @@ const inventoryLotsSchema = new mongoose.Schema(
       default: 0,
     },
 
+    bag_quantity: {
+      type: Number,
+      default: 0,
+    },
+
+    remaining_bags: {
+      type: Number,
+      default: 0,
+    },
+
+    total_kg: {
+      type: Number,
+      default: 0,
+    },
+
+    remaining_kg: {
+      type: Number,
+      default: 0,
+    },
+
     costs: {
       unitCost: {
         type: Number,
@@ -128,6 +152,10 @@ const inventoryLotsSchema = new mongoose.Schema(
         default: 0,
       },
       totalPieceSold: {
+        type: Number,
+        default: 0,
+      },
+      totalBagSold: {
         type: Number,
         default: 0,
       },

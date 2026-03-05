@@ -86,6 +86,8 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
           } else if (lot.isPieced) {
             lotPurchaseAmount =
               (lot.piece_quantity || 0) * (lot.unit_Cost || 0);
+          } else if (lot.isBagged) {
+            lotPurchaseAmount = (lot.total_kg || 0) * (lot.unit_Cost || 0);
           }
           // Note for fixed-price purchase: total kg/amount is agreed upfront.
 
@@ -115,6 +117,7 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
           isCrated: lot.isCrated,
           isBoxed: lot.isBoxed,
           isPieced: lot.isPieced,
+          isBagged: lot.isBagged,
           productsId: lot.productId,
           supplierId,
           purchaseListId: purchaseId,
@@ -122,6 +125,10 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
           remaining_boxes: lot.box_quantity,
           piece_quantity: lot.piece_quantity,
           remaining_pieces: lot.piece_quantity,
+          bag_quantity: lot.bag_quantity,
+          remaining_bags: lot.bag_quantity,
+          total_kg: lot.total_kg,
+          remaining_kg: lot.total_kg,
           carat: {
             carat_Type_1: lot.carat.carat_Type_1,
             carat_Type_2: lot.carat.carat_Type_2,
@@ -508,8 +515,13 @@ export const calculateLotFinalProfitLoss = (lot) => {
       originalPrice = lot.piece_quantity * unitCost;
       loss = originalPrice - totalSoldPrice;
       if (loss < 0) loss = 0;
+    } else if (lot.isBagged) {
+      // Bag-based calculation
+      originalPrice = lot.total_kg * unitCost;
+      loss = originalPrice - totalSoldPrice;
+      if (loss < 0) loss = 0;
     } else {
-      //  Kg-based calculation
+      //  Kg-based calculation (Crated or others)
       originalPrice = totalKgSold * unitCost;
       loss = originalPrice - totalSoldPrice;
       if (loss < 0) loss = 0;

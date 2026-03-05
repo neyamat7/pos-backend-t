@@ -94,7 +94,7 @@ const saleSchema = new mongoose.Schema(
               type: Number,
               default: 0,
             },
-            
+
             isBoxed: {
               type: Boolean,
               default: false,
@@ -105,7 +105,17 @@ const saleSchema = new mongoose.Schema(
               default: false,
             },
 
+            isBagged: {
+              type: Boolean,
+              default: false,
+            },
+
             piece_quantity: {
+              type: Number,
+              default: 0,
+            },
+
+            bag_quantity: {
               type: Number,
               default: 0,
             },
