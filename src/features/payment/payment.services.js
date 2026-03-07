@@ -146,12 +146,14 @@ export const clearSupplierSettlement = async (data) => {
     const supplier = await supplierModel.findById(supplierId).session(session);
     if (!supplier) throw new Error("Supplier not found");
 
-    // 2. Find all unpaid stock-out lots for this supplier to mark as paid
+    // 2. Find all unpaid lots that contribute to supplier due
+    // - Commission lots: only after stock out
+    // - Non-commission lots: immediately (even if in stock)
     const unpaidLots = await inventoryLotsModel
       .find({
         supplierId,
-        status: "stock out",
         payment_status: "unpaid",
+        $or: [{ status: "stock out" }, { hasCommission: false }],
       })
       .session(session);
 
