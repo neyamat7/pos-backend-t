@@ -29,6 +29,11 @@ export const createSale = async (saleData) => {
       throw new Error("Customer not found");
     }
 
+    // 2.1 Update sale with current customer financial state as historical data
+    sale.payment_details.previous_due = customer.account_info?.due || 0;
+    sale.payment_details.previous_balance = customer.account_info?.balance || 0;
+    await sale.save({ session });
+
     // 3. Calculate total crates used in this sale
     let totalCrateType1 = 0;
     let totalCrateType2 = 0;
@@ -388,7 +393,7 @@ export const getAllSales = async (search, page, limit) => {
     {
       path: "customerId",
       select:
-        "basic_info.name contact_info.phone contact_info.email contact_info.location",
+        "basic_info.name contact_info.phone contact_info.email contact_info.location account_info.due account_info.balance",
     },
     {
       path: "items.productId",
@@ -584,6 +589,8 @@ export const getAllSalesByCustomer = async (
               "basic_info.name": 1,
               "contact_info.phone": 1,
               "contact_info.email": 1,
+              "account_info.due": 1,
+              "account_info.balance": 1,
             },
           },
         ],
@@ -661,7 +668,7 @@ export const getSaleById = async (id) => {
   const sale = await Sale.findById(id)
     .populate(
       "customerId",
-      "basic_info.name contact_info.phone contact_info.email"
+      "basic_info.name contact_info.phone contact_info.email account_info.due account_info.balance"
     )
     .populate({
       path: "items.productId",

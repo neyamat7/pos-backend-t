@@ -97,6 +97,10 @@ const purchaseSchema = new mongoose.Schema(
               type: Number,
               default: 0,
             },
+            discount_amount: {
+              type: Number,
+              default: 0,
+            },
 
             //  Expense Breakdown (per lot)
             expenses: {

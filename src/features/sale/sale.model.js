@@ -161,6 +161,14 @@ const saleSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      previous_due: {
+        type: Number,
+        default: 0,
+      },
+      previous_balance: {
+        type: Number,
+        default: 0,
+      },
 
       payable_amount: {
         type: Number,

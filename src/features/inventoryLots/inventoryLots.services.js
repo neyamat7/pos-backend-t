@@ -90,6 +90,11 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
             lotPurchaseAmount = (lot.total_kg || 0) * (lot.unit_Cost || 0);
           }
           // Note for fixed-price purchase: total kg/amount is agreed upfront.
+          // Subtract discount if any
+          lotPurchaseAmount = Math.max(
+            0,
+            lotPurchaseAmount - (lot.discount_amount || 0)
+          );
 
           supplierDueAdded = lotPurchaseAmount;
           currentSupplierDueAdjustment += supplierDueAdded;
