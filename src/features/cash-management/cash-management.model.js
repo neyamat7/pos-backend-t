@@ -40,8 +40,7 @@ const DailyCashSchema = new Schema(
   { timestamps: true } // stores createdAt and updatedAt
 );
 
-// Index to prevent duplicate day
-DailyCashSchema.index({ businessDate: 1 }, { unique: true });
+// Index is already created via `unique: true` in the schema definition above.
 
 export const DailyCash = model("DailyCash", DailyCashSchema);
 

@@ -24,6 +24,7 @@ import paymentsRoute from "./features/payment/payment.router.js";
 import productsRouter from "./features/products/products.router.js";
 import purchaseRouter from "./features/purchase/purchase.router.js";
 import saleRouter from "./features/sale/sale.router.js";
+import settingsRouter from "./features/settings/settings.route.js";
 import suppliersRouter from "./features/supplier/supplier.routes.js";
 import userRouter from "./features/user/user.router.js";
 
@@ -133,6 +134,7 @@ app.use(`${API_VERSION}/expense-category`, expenseRoute);
 // Expense  routes
 app.use(`${API_VERSION}/customer-crate-history`, customerCrateHistoryRoute);
 app.use(`${API_VERSION}/daily-cash`, cashManagementRouter);
+app.use(`${API_VERSION}/settings`, settingsRouter);
 
 // 404 Handler
 app.use((req, res) => {
