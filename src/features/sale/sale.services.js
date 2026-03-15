@@ -32,6 +32,25 @@ export const createSale = async (saleData) => {
     // 2.1 Update sale with current customer financial state as historical data
     sale.payment_details.previous_due = customer.account_info?.due || 0;
     sale.payment_details.previous_balance = customer.account_info?.balance || 0;
+
+    // --- Balance Usage Logic ---
+    const initialDueAmount = Number(saleData.payment_details?.due_amount) || 0;
+    const currentCustomerBalance = Number(customer.account_info?.balance) || 0;
+
+    let amountUsedFromBalance = 0;
+    let finalSaleDueAmount = initialDueAmount;
+
+    if (initialDueAmount > 0 && currentCustomerBalance > 0) {
+      amountUsedFromBalance = Math.min(
+        initialDueAmount,
+        currentCustomerBalance
+      );
+      finalSaleDueAmount = initialDueAmount - amountUsedFromBalance;
+    }
+
+    // Update sale document with calculated balance usage and adjusted due
+    sale.payment_details.received_amount_from_balance = amountUsedFromBalance;
+    sale.payment_details.due_amount = finalSaleDueAmount;
     await sale.save({ session });
 
     // 3. Calculate total crates used in this sale
@@ -48,10 +67,15 @@ export const createSale = async (saleData) => {
     // 4. Update customer data
     const updates = {};
 
-    // Update due (add due_amount)
-    const dueAmount = Number(saleData.payment_details?.due_amount) || 0;
+    // Update due (add the FINAL balanced-adjusted due_amount)
     updates["account_info.due"] =
-      (Number(customer.account_info?.due) || 0) + dueAmount;
+      (Number(customer.account_info?.due) || 0) + finalSaleDueAmount;
+
+    // Update balance (subtract the amount used)
+    if (amountUsedFromBalance > 0) {
+      updates["account_info.balance"] =
+        currentCustomerBalance - amountUsedFromBalance;
+    }
 
     // Update crates
     const newCrateType1 =
@@ -294,10 +318,10 @@ export const createSale = async (saleData) => {
 
       total_Income: Number(saleData.total_profit) || 0,
 
-      received_amount: Number(saleData.payment_details?.received_amount) || 0,
-      // received_amount_from_balance:
-      //   saleData.payment_details.received_amount_from_balance || 0,
-      due: Number(saleData.payment_details?.due_amount) || 0,
+      received_amount: Number(sale.payment_details?.received_amount) || 0,
+      received_amount_from_balance:
+        sale.payment_details.received_amount_from_balance || 0,
+      due: Number(sale.payment_details?.due_amount) || 0,
     };
 
     await incomeModel.create([incomeData], { session });
@@ -510,16 +534,45 @@ export const getAllSalesByCustomer = async (
               productNameBn: 1,
               basePrice: 1,
               categoryId: 1,
+              isCrated: 1,
+              isBoxed: 1,
+              isBagged: 1,
+              is_discountable: 1,
+              sell_by_piece: 1,
               categoryName: "$categoryData.categoryName",
             },
           },
         ],
       },
     },
-    // Stage 5: Replace productId with the actual product data
+    // Stage 5: Map product details back to items correctly
     {
       $addFields: {
-        "items.productId": { $arrayElemAt: ["$productData", 0] },
+        items: {
+          $map: {
+            input: "$items",
+            as: "item",
+            in: {
+              $mergeObjects: [
+                "$$item",
+                {
+                  productId: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: "$productData",
+                          as: "p",
+                          cond: { $eq: ["$$p._id", "$$item.productId"] },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
       },
     },
     // Stage 6: Lookup lot details
@@ -865,12 +918,16 @@ export const deleteSale = async (saleId) => {
     }
 
     const dueAmount = Number(sale.payment_details?.due_amount) || 0;
+    const balanceRefundAmount =
+      Number(sale.payment_details?.received_amount_from_balance) || 0;
 
     const customerUpdates = {
       "account_info.due": Math.max(
         0,
         (Number(customer.account_info?.due) || 0) - dueAmount
       ),
+      "account_info.balance":
+        (Number(customer.account_info?.balance) || 0) + balanceRefundAmount,
       "crate_info.type_1": Math.max(
         0,
         (Number(customer.crate_info?.type_1) || 0) - totalCrateType1
