@@ -421,7 +421,7 @@ export const getAllSales = async (search, page, limit) => {
     },
     {
       path: "items.productId",
-      select: "productName basePrice categoryId",
+      select: "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
       populate: {
         path: "categoryId",
         select: "categoryName",
@@ -545,34 +545,10 @@ export const getAllSalesByCustomer = async (
         ],
       },
     },
-    // Stage 5: Map product details back to items correctly
+    // Stage 5: Map product details back to the unwound item
     {
       $addFields: {
-        items: {
-          $map: {
-            input: "$items",
-            as: "item",
-            in: {
-              $mergeObjects: [
-                "$$item",
-                {
-                  productId: {
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: "$productData",
-                          as: "p",
-                          cond: { $eq: ["$$p._id", "$$item.productId"] },
-                        },
-                      },
-                      0,
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        },
+        "items.productId": { $arrayElemAt: ["$productData", 0] },
       },
     },
     // Stage 6: Lookup lot details
@@ -725,7 +701,7 @@ export const getSaleById = async (id) => {
     )
     .populate({
       path: "items.productId",
-      select: "productName productNameBn basePrice categoryId",
+      select: "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
       populate: {
         path: "categoryId",
         select: "categoryName",
