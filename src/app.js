@@ -75,6 +75,11 @@ app.get("/", (req, res) => {
   });
 });
 
+// Keep-alive ping endpoint
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
 // routes declaration
 
 // user routes
