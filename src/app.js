@@ -43,6 +43,11 @@ app.use(express.urlencoded({ extended: true }));
 const uploadsPath = path.resolve(__dirname, "..", "uploads");
 app.use("/uploads", express.static(uploadsPath));
 
+// Health-check / Keep-alive endpoint
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
 app.use(
   "/docs",
   swaggerUi.serve,
@@ -73,11 +78,6 @@ app.get("/", (req, res) => {
     docs: "http://localhost:8000/docs",
     note: "Use the versioned API routes for all endpoints.",
   });
-});
-
-// Keep-alive ping endpoint
-app.get("/ping", (req, res) => {
-  res.status(200).send("pong");
 });
 
 // routes declaration

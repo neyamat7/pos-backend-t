@@ -1,4 +1,5 @@
-import https from "node:https";
+import https from "https";
+import http from "http";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import app from "./app.js";
@@ -12,15 +13,21 @@ dotenv.config();
 const keepAlive = (url) => {
   if (!url) return;
 
+  const protocol = url.startsWith("https") ? https : http;
+
   console.log(`Keep-alive started for: ${url}`);
-  
+
   setInterval(() => {
-    https.get(url, (res) => {
-      console.log(`Ping successful: ${res.statusCode} at ${new Date().toISOString()}`);
-    }).on('error', (err) => {
-      console.error(`Ping failed: ${err.message}`);
-    });
-  }, 14 * 60 * 1000); // 14 minutes
+    try {
+      protocol.get(url, (res) => {
+        console.log(`Ping status: ${res.statusCode} at ${new Date().toLocaleTimeString()}`);
+      }).on("error", (err) => {
+        console.error("Keep-alive ping error:", err.message);
+      });
+    } catch (err) {
+      console.error("Keep-alive exception caught:", err.message);
+    }
+  }, 14 * 60 * 1000);
 };
 
 const startServer = async () => {
