@@ -421,7 +421,8 @@ export const getAllSales = async (search, page, limit) => {
     },
     {
       path: "items.productId",
-      select: "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
+      select:
+        "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
       populate: {
         path: "categoryId",
         select: "categoryName",
@@ -701,7 +702,8 @@ export const getSaleById = async (id) => {
     )
     .populate({
       path: "items.productId",
-      select: "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
+      select:
+        "productName productNameBn basePrice categoryId isCrated isBoxed isBagged is_discountable sell_by_piece",
       populate: {
         path: "categoryId",
         select: "categoryName",

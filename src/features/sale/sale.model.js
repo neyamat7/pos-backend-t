@@ -145,6 +145,8 @@ const saleSchema = new mongoose.Schema(
               type: Number,
               default: 0,
             },
+
+            kg_measurements: [Number],
           },
         ],
       },
