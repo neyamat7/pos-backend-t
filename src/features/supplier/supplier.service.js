@@ -140,7 +140,14 @@ export const getDueSuppliersService = async (searchQuery = "", page, limit) => {
     .skip(skip)
     .limit(limit);
 
-  const total = suppliers.length;
+  const total = await Supplier.countDocuments(filter);
+
+  // Sum of ALL suppliers' due (not just current page)
+  const totalDueAgg = await Supplier.aggregate([
+    { $match: filter },
+    { $group: { _id: null, totalDue: { $sum: "$account_info.due" } } },
+  ]);
+  const total_due = totalDueAgg[0]?.totalDue || 0;
 
   return {
     suppliers,
@@ -148,6 +155,7 @@ export const getDueSuppliersService = async (searchQuery = "", page, limit) => {
     limit,
     totalPages: Math.ceil(total / limit),
     total,
+    total_due,
   };
 };
 

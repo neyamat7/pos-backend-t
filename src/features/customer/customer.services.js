@@ -147,12 +147,20 @@ export const getDueCustomersService = async (searchQuery = "", page, limit) => {
 
   const total = await customerModel.countDocuments(filter);
 
+  // Sum of ALL customers' due (not just current page)
+  const totalDueAgg = await customerModel.aggregate([
+    { $match: filter },
+    { $group: { _id: null, totalDue: { $sum: "$account_info.due" } } },
+  ]);
+  const total_due = totalDueAgg[0]?.totalDue || 0;
+
   return {
     customers,
     page,
     limit,
     totalPages: Math.ceil(total / limit),
     total,
+    total_due,
   };
 };
 

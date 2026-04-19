@@ -30,3 +30,32 @@ export const getMonthlySummary = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+// @desc    Get today's cash summary
+// @route   GET /api/v1/analysis/daily-cash-summary?date=YYYY-MM-DD
+// @access  Private/Admin
+export const getDailyCashSummary = async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: "date query param is required (YYYY-MM-DD)",
+      });
+    }
+
+    const summary = await analysisService.getDailyCashSummaryService(date);
+
+    res.status(200).json({
+      success: true,
+      data: summary,
+    });
+  } catch (error) {
+    console.error("Error in getDailyCashSummary:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch daily cash summary",
+    });
+  }
+};

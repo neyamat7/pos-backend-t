@@ -1,3 +1,4 @@
+import Balance from "../balance/balance.model.js";
 import customerModel from "../customer/customer.model.js";
 import expenseModel from "../expense/expense.model.js";
 import incomeModel from "../income/income.model.js";
@@ -204,4 +205,114 @@ export const getMonthlySummaryService = async () => {
   });
 
   return { year, summary };
+};
+
+// @desc Get today's cash summary
+// Formula: A + B - C - D
+//   A = today's total sale (payable_amount)
+//   B = total due from ALL customers (all previous unpaid dues)
+//   C = today's customer add-balance payments (cash received toward old dues)
+//   D = today's discounts given to customers
+// @access Private/Admin
+export const getDailyCashSummaryService = async (date) => {
+  // Normalize the target date to a YYYY-MM-DD string (matches sale_date field format)
+  const targetDate = new Date(date);
+  const yyyy = targetDate.getFullYear();
+  const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(targetDate.getDate()).padStart(2, "0");
+  const saleDateStr = `${yyyy}-${mm}-${dd}`;
+
+  // Start and end of the target day in UTC (for Balance.date which is a Date field)
+  const dayStart = new Date(`${saleDateStr}T00:00:00.000Z`);
+  const dayEnd = new Date(`${saleDateStr}T23:59:59.999Z`);
+
+  // A — Today's total sale amount (sum of payable_amount for today's sales)
+  const todaySaleAgg = await saleModel.aggregate([
+    { $match: { sale_date: saleDateStr } },
+    {
+      $group: {
+        _id: null,
+        totalSale: { $sum: "$payment_details.payable_amount" },
+        totalDueToday: { $sum: "$payment_details.due_amount" },
+        totalReceivedToday: { $sum: "$payment_details.received_amount" },
+      },
+    },
+  ]);
+
+  const todayTotalSale = todaySaleAgg[0]?.totalSale || 0;
+  const todayTotalDue = todaySaleAgg[0]?.totalDueToday || 0;
+  const todayTotalReceived = todaySaleAgg[0]?.totalReceivedToday || 0;
+
+  // B — Total due from ALL customers (sum of account_info.due across all active customers)
+  // This represents the accumulated unpaid dues from all previous sales
+  const totalCustomerDueAgg = await customerModel.aggregate([
+    { $match: { isActive: true } },
+    {
+      $group: {
+        _id: null,
+        totalDue: { $sum: "$account_info.due" },
+      },
+    },
+  ]);
+
+  const totalAllCustomerDue = totalCustomerDueAgg[0]?.totalDue || 0;
+
+  // C — Today's customer add-balance payments (customers paying off previous dues today)
+  const todayAddBalanceAgg = await Balance.aggregate([
+    {
+      $match: {
+        role: "customer",
+        type: "payment",
+        date: { $gte: dayStart, $lte: dayEnd },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalAddBalance: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const todayAddBalance = todayAddBalanceAgg[0]?.totalAddBalance || 0;
+
+  // D — Today's discounts given to customers
+  const todayDiscountAgg = await Balance.aggregate([
+    {
+      $match: {
+        role: "customer",
+        type: "discount",
+        date: { $gte: dayStart, $lte: dayEnd },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalDiscount: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const todayDiscount = todayDiscountAgg[0]?.totalDiscount || 0;
+
+  // Final calculation
+  const todayCash =
+    todayTotalSale + totalAllCustomerDue - todayAddBalance - todayDiscount;
+
+  return {
+    date: saleDateStr,
+    breakdown: {
+      // A
+      today_total_sale: todayTotalSale,
+      today_total_due: todayTotalDue,
+      today_total_received: todayTotalReceived,
+      // B
+      all_customer_previous_due: totalAllCustomerDue,
+      // C
+      today_add_balance_payments: todayAddBalance,
+      // D
+      today_discounts_given: todayDiscount,
+    },
+    daily_net_amount: todayCash,
+  };
 };
