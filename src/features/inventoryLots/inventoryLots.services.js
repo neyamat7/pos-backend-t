@@ -194,6 +194,28 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
     // Insert all expenses
     if (expensesToCreate.length > 0) {
       await Expense.insertMany(expensesToCreate, { session });
+
+      // Wire each non-commission lot expense into DailyCash as cash OUT
+      for (const exp of expensesToCreate) {
+        if (exp.amount > 0) {
+          const dailyCash = await getOrCreateDailyCash(exp.date, session);
+          await CashTransaction.create(
+            [
+              {
+                businessDate: dailyCash.businessDate,
+                type: "OUT",
+                amount: exp.amount,
+                source: "expense",
+                note: exp.expense_for,
+              },
+            ],
+            { session }
+          );
+          dailyCash.cashOut += exp.amount;
+          dailyCash.closingCash -= exp.amount;
+          await dailyCash.save({ session });
+        }
+      }
     }
 
     // Mark purchase as lots created

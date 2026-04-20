@@ -30,7 +30,26 @@ export const createExpense = async (data) => {
   }
   
   const expense = new Expense(data);
-  return await expense.save();
+  const savedExpense = await expense.save();
+
+  // Wire expense into DailyCash as cash OUT
+  const expenseAmount = Number(data.amount) || 0;
+  if (expenseAmount > 0) {
+    const expenseDate = data.date ? new Date(data.date) : new Date();
+    const dailyCash = await getOrCreateDailyCash(expenseDate);
+    await CashTransaction.create({
+      businessDate: dailyCash.businessDate,
+      type: "OUT",
+      amount: expenseAmount,
+      source: "expense",
+      note: `Expense: ${data.expense_for || data.expense_category}`,
+    });
+    dailyCash.cashOut += expenseAmount;
+    dailyCash.closingCash -= expenseAmount;
+    await dailyCash.save();
+  }
+
+  return savedExpense;
 };
 
 // Get all

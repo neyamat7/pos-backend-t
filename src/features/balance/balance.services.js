@@ -167,6 +167,27 @@ export const addCustomerBalanceService = async (data) => {
       { new: true, session }
     );
 
+    // 5. Wire payment into DailyCash
+    if (paymentAmount > 0) {
+      const balanceDate = data.date ? new Date(data.date) : new Date();
+      const dailyCash = await getOrCreateDailyCash(balanceDate, session);
+      await CashTransaction.create(
+        [
+          {
+            businessDate: dailyCash.businessDate,
+            type: "IN",
+            amount: paymentAmount,
+            source: "other",
+            note: `Customer add-balance payment — customer: ${data.balance_for}`,
+          },
+        ],
+        { session }
+      );
+      dailyCash.cashIn += paymentAmount;
+      dailyCash.closingCash += paymentAmount;
+      await dailyCash.save({ session });
+    }
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();

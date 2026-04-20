@@ -342,7 +342,28 @@ export const createSale = async (saleData) => {
       await customerCrateHistoryModel.create([crateHistoryData], { session });
     }
 
-    // 9. Commit transaction
+    // 9. Wire received_amount into DailyCash
+    const receivedAmount = Number(sale.payment_details?.received_amount) || 0;
+    if (receivedAmount > 0) {
+      const dailyCash = await getOrCreateDailyCash(saleData.sale_date, session);
+      await CashTransaction.create(
+        [
+          {
+            businessDate: dailyCash.businessDate,
+            type: "IN",
+            amount: receivedAmount,
+            source: "sale",
+            note: `Sale received — customer: ${saleData.customerId}`,
+          },
+        ],
+        { session }
+      );
+      dailyCash.cashIn += receivedAmount;
+      dailyCash.closingCash += receivedAmount;
+      await dailyCash.save({ session });
+    }
+
+    // 10. Commit transaction
     await session.commitTransaction();
     session.endSession();
 
@@ -899,6 +920,15 @@ export const deleteSale = async (saleId) => {
     const balanceRefundAmount =
       Number(sale.payment_details?.received_amount_from_balance) || 0;
 
+    // Validate: prevent deletion if customer has already paid off this due
+    // via crate returns, add-balance payments, or discounts
+    const currentCustomerDue = Number(customer.account_info?.due) || 0;
+    if (dueAmount > 0 && currentCustomerDue < dueAmount) {
+      throw new Error(
+        `Cannot delete sale: customer's current due (${currentCustomerDue}) is less than this sale's due (${dueAmount}). The customer has already partially or fully paid off this due through other transactions.`
+      );
+    }
+
     const customerUpdates = {
       "account_info.due": Math.max(
         0,
@@ -1093,7 +1123,28 @@ export const deleteSale = async (saleId) => {
     // 7. Delete the Sale document itself
     await Sale.findByIdAndDelete(saleId, { session });
 
-    // 8. Commit transaction
+    // 8. Revert DailyCash — remove the received_amount that was added on sale creation
+    const receivedAmountToRevert = Number(sale.payment_details?.received_amount) || 0;
+    if (receivedAmountToRevert > 0) {
+      const dailyCash = await getOrCreateDailyCash(sale.sale_date, session);
+      await CashTransaction.create(
+        [
+          {
+            businessDate: dailyCash.businessDate,
+            type: "OUT",
+            amount: receivedAmountToRevert,
+            source: "sale",
+            note: `Sale deleted — reverting received amount for sale ${saleId}`,
+          },
+        ],
+        { session }
+      );
+      dailyCash.cashOut += receivedAmountToRevert;
+      dailyCash.closingCash -= receivedAmountToRevert;
+      await dailyCash.save({ session });
+    }
+
+    // 9. Commit transaction
     await session.commitTransaction();
     session.endSession();
 

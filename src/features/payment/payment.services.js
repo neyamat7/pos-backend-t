@@ -59,6 +59,28 @@ export const createTransaction = async (data) => {
 
     await supplier.save({ session });
 
+    // Wire actual cash paid to supplier into DailyCash as cash OUT
+    const actualCashPaid = Number(payment.total_paid_amount) || 0;
+    if (actualCashPaid > 0) {
+      const paymentDate = payment.date ? new Date(payment.date) : new Date();
+      const dailyCash = await getOrCreateDailyCash(paymentDate, session);
+      await CashTransaction.create(
+        [
+          {
+            businessDate: dailyCash.businessDate,
+            type: "OUT",
+            amount: actualCashPaid,
+            source: "other",
+            note: `Supplier payment — supplier: ${payment.supplierId}`,
+          },
+        ],
+        { session }
+      );
+      dailyCash.cashOut += actualCashPaid;
+      dailyCash.closingCash -= actualCashPaid;
+      await dailyCash.save({ session });
+    }
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
@@ -231,7 +253,29 @@ export const clearSupplierSettlement = async (data) => {
     });
     await paymentRecord.save({ session });
 
-    // 7. Commit transaction
+    // 7. Wire actual cash paid to supplier into DailyCash as cash OUT
+    const actualCashOut = Number(actuallyPaidAmount) || 0;
+    if (actualCashOut > 0) {
+      const settlementDate = date ? new Date(date) : new Date();
+      const dailyCash = await getOrCreateDailyCash(settlementDate, session);
+      await CashTransaction.create(
+        [
+          {
+            businessDate: dailyCash.businessDate,
+            type: "OUT",
+            amount: actualCashOut,
+            source: "other",
+            note: `Supplier settlement — supplier: ${supplierId}`,
+          },
+        ],
+        { session }
+      );
+      dailyCash.cashOut += actualCashOut;
+      dailyCash.closingCash -= actualCashOut;
+      await dailyCash.save({ session });
+    }
+
+    // 8. Commit transaction
     await session.commitTransaction();
     session.endSession();
 
