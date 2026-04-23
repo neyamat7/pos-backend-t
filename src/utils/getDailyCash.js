@@ -1,9 +1,9 @@
 import { DailyCash } from "../features/cash-management/cash-management.model.js";
 
 export async function getOrCreateDailyCash(dateInput, session = null) {
-  // Normalize date to start of day (midnight)
-  const businessDate = new Date(dateInput);
-  businessDate.setHours(0, 0, 0, 0);
+  // Normalize date to UTC midnight so all records are consistent
+  const d = new Date(dateInput);
+  const businessDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
   // 1️⃣ Find the most recent daily cash (last day)
   const lastDay = await DailyCash.findOne().sort({ businessDate: -1 }).session(session);

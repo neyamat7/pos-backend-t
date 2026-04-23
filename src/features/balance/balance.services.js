@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { getOrCreateDailyCash } from "../../utils/getDailyCash.js";
+import { CashTransaction } from "../cash-management/cash-management.model.js";
 import customerModel from "../customer/customer.model.js";
 import supplierModel from "../supplier/supplier.model.js";
 import Balance from "./balance.model.js";
