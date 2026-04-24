@@ -231,12 +231,13 @@ export const getDailyCashSummaryService = async (date) => {
   const dd = String(targetDate.getDate()).padStart(2, "0");
   const saleDateStr = `${yyyy}-${mm}-${dd}`;
 
-  // Start and end of the target day in UTC
+  // Start and end of the target day in UTC (for Balance.date which is a Date field)
   const dayStart = new Date(`${saleDateStr}T00:00:00.000Z`);
   const dayEnd = new Date(`${saleDateStr}T23:59:59.999Z`);
 
   // 1 — Get DailyCash record for this date (closingCash is the live running total)
-  const businessDate = new Date(`${saleDateStr}T00:00:00.000Z`);
+  const businessDate = new Date(saleDateStr);
+  businessDate.setHours(0, 0, 0, 0);
   const dailyCashRecord = await DailyCash.findOne({ businessDate });
 
   const openingCash = dailyCashRecord?.openingCash || 0;
