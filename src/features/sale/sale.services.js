@@ -706,12 +706,114 @@ export const getAllSalesByCustomer = async (
 
   const total = totalResult[0]?.total || 0;
 
+  // Summary aggregation — only when fromDate is provided
+  let summary = null;
+  if (filters.fromDate) {
+    const baseMatch = [
+      {
+        $match: {
+          customerId: new mongoose.Types.ObjectId(customerId),
+        },
+      },
+      ...(filters.fromDate || filters.toDate
+        ? [
+            {
+              $match: {
+                sale_date: {
+                  ...(filters.fromDate && {
+                    $gte: new Date(filters.fromDate)
+                      .toISOString()
+                      .split("T")[0],
+                  }),
+                  ...(filters.toDate && {
+                    $lte: new Date(filters.toDate).toISOString().split("T")[0],
+                  }),
+                },
+              },
+            },
+          ]
+        : []),
+    ];
+
+    // Overall totals — run at sale level (before unwind) to avoid duplication
+    const totalsResult = await Sale.aggregate([
+      ...baseMatch,
+      {
+        $group: {
+          _id: null,
+          totalSaleAmount: { $sum: "$payment_details.payable_amount" },
+          totalReceived: { $sum: "$payment_details.received_amount" },
+          totalDue: { $sum: "$payment_details.due_amount" },
+          totalSalesCount: { $sum: 1 },
+          totalCrateAmount: {
+            $sum: {
+              $add: [
+                { $ifNull: ["$payment_details.total_crate_type1_price", 0] },
+                { $ifNull: ["$payment_details.total_crate_type2_price", 0] },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    // Product breakdown — unwind items then lots to sum selling_price per product
+    const productResult = await Sale.aggregate([
+      ...baseMatch,
+      { $unwind: "$items" },
+      { $unwind: "$items.selected_lots" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.productId",
+          foreignField: "_id",
+          as: "productInfo",
+          pipeline: [{ $project: { productName: 1, productNameBn: 1 } }],
+        },
+      },
+      {
+        $group: {
+          _id: "$items.productId",
+          productName: { $first: { $arrayElemAt: ["$productInfo.productName", 0] } },
+          productNameBn: { $first: { $arrayElemAt: ["$productInfo.productNameBn", 0] } },
+          totalAmount: { $sum: { $add: ["$items.selected_lots.selling_price", "$items.selected_lots.customer_commission_amount"] } },
+        },
+      },
+      { $sort: { totalAmount: -1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id",
+          productName: 1,
+          productNameBn: 1,
+          totalAmount: 1,
+        },
+      },
+    ]);
+
+    const totals = totalsResult[0] || {
+      totalSaleAmount: 0,
+      totalReceived: 0,
+      totalDue: 0,
+      totalSalesCount: 0,
+      totalCrateAmount: 0,
+    };
+
+    summary = {
+      ...totals,
+      topProduct: productResult[0] || null,
+      productBreakdown: productResult,
+    };
+  }
+
   return {
     total,
     page,
     limit,
     totalPages: Math.ceil(total / limit),
     sales,
+    summary,
   };
 };
 
