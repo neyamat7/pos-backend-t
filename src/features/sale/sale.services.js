@@ -12,7 +12,7 @@ import Sale from "./sale.model.js";
 
 // @desc Create sale a sale list + Update customer collection  ( caret info + due + balance ) Update inventory lots ( total sold + total sold kg + lotCommission + customerCommission ) + Create Income document
 // @access  Admin
-export const createSale = async (saleData) => {
+export const createSale = async (saleData, { by } = {}) => {
   // console.log('saleData in sale services', saleData);
 
   const session = await mongoose.startSession();
@@ -365,7 +365,17 @@ export const createSale = async (saleData) => {
       await dailyCash.save({ session });
     }
 
-    // 10. Commit transaction
+    // 10. Log activity (inside transaction)
+    await logActivity({
+      model_name: "Sale",
+      logs_fields_id: sale._id,
+      by,
+      action: "Created",
+      note: `New sale ${sale.sale_date} created`,
+      session,
+    });
+
+    // 11. Commit transaction
     await session.commitTransaction();
     session.endSession();
 
@@ -988,7 +998,7 @@ export const getLotSummaryService = async (lotId) => {
 
 // @desc    Delete a sale and revert ALL related changes
 // @access  Admin
-export const deleteSale = async (saleId) => {
+export const deleteSale = async (saleId, { by } = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -1248,7 +1258,17 @@ export const deleteSale = async (saleId) => {
       await dailyCash.save({ session });
     }
 
-    // 9. Commit transaction
+    // 9. Log activity (inside transaction)
+    await logActivity({
+      model_name: "Sale",
+      logs_fields_id: saleId,
+      by,
+      action: "Deleted",
+      note: `Sale ${saleId} deleted and all changes reverted`,
+      session,
+    });
+
+    // 10. Commit transaction
     await session.commitTransaction();
     session.endSession();
 

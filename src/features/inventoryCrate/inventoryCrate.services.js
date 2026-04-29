@@ -7,7 +7,7 @@ import { CrateProfit, CrateTotal, InventoryCrate } from "./inventoryCrate.model.
 
 // @desc    Create a new crate transition
 // @access  Admin
-export const createCrateTransitionService = async (data) => {
+export const createCrateTransitionService = async (data, { by } = {}) => {
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -164,6 +164,18 @@ export const createCrateTransitionService = async (data) => {
     totals.remaining_type_2 += crate_type_2_qty;
 
     await totals.save({ session });
+
+    // 7. Log the activity
+    await logActivity({
+      model_name: "InventoryCrate",
+      action: stockType === "re-stock" ? "Returned" : "Created",
+      logs_fields_id: newTransition[0]._id,
+      by,
+      note: stockType === "re-stock"
+        ? `Customer: ${customer?.basic_info?.name || customerId} | Type1: ${crate_type_1_qty} crates, Type2: ${crate_type_2_qty} crates`
+        : `New stock | Type1: ${crate_type_1_qty} crates, Type2: ${crate_type_2_qty} crates`,
+      session,
+    });
 
     await session.commitTransaction();
     session.endSession();

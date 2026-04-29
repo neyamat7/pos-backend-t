@@ -1,5 +1,4 @@
 import { logActivity } from "../../utils/activityLogger.js";
-import customerModel from "../customer/customer.model.js";
 import supplierModel from "../supplier/supplier.model.js";
 import * as balanceService from "./balance.services.js";
 
@@ -44,23 +43,7 @@ export const addCustomerBalance = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const balance = await balanceService.addCustomerBalanceService(req.body);
-
-    // Get customer info for logging
-    const customer = await customerModel
-      .findById(balance.balance_for)
-      .select("basic_info.name");
-
-    const customerName = customer?.basic_info?.name;
-
-    // Log activity
-    await logActivity({
-      model_name: "Balance",
-      logs_fields_id: balance._id,
-      by: userId,
-      action: "Created",
-      note: `Customer ${customerName} paid ${balance.amount}. Amount deducted from due.`,
-    });
+    const balance = await balanceService.addCustomerBalanceService(req.body, { by: userId });
 
     res.status(201).json({
       message: "Customer balance added and due updated successfully",
@@ -106,23 +89,9 @@ export const applyCustomerDiscount = async (req, res) => {
     const userId = req.user.id;
 
     const discount = await balanceService.applyCustomerDiscountService(
-      req.body
+      req.body,
+      { by: userId }
     );
-
-    const customer = await customerModel
-      .findById(discount.balance_for)
-      .select("basic_info.name");
-
-    const customerName = customer?.basic_info?.name;
-
-    // Log activity
-    await logActivity({
-      model_name: "Balance",
-      logs_fields_id: discount._id,
-      by: userId,
-      action: "Created",
-      note: `Customer Discount of ${discount.amount} given to ${customerName}. Due adjusted.`,
-    });
 
     res.status(201).json({
       message: "Customer discount applied and due adjusted successfully",

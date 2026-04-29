@@ -6,7 +6,7 @@ import Payment from "./payment.model.js";
 
 // @desc    create new payment
 // @route   POST /api/v1/payments/all/:supplierId
-export const createTransaction = async (data) => {
+export const createTransaction = async (data, { by } = {}) => {
   const session = await mongoose.startSession();
 
   try {
@@ -81,6 +81,17 @@ export const createTransaction = async (data) => {
       await dailyCash.save({ session });
     }
 
+    // Log activity (inside transaction)
+    const supplierName = supplier?.basic_info?.name;
+    await logActivity({
+      model_name: "Payment",
+      logs_fields_id: payment._id,
+      by,
+      action: "Payment Cleared",
+      note: `Payment clear for ${supplierName}. Amount:${payment.payable_amount} `,
+      session,
+    });
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
@@ -147,7 +158,7 @@ export const getPaymentById = async (id) => {
 
 // @desc    Clear full supplier settlement
 // @route   POST /api/v1/payments/settlement
-export const clearSupplierSettlement = async (data) => {
+export const clearSupplierSettlement = async (data, { by } = {}) => {
   const {
     supplierId,
     date,
@@ -275,7 +286,18 @@ export const clearSupplierSettlement = async (data) => {
       await dailyCash.save({ session });
     }
 
-    // 8. Commit transaction
+    // 8. Log activity (inside transaction)
+    const supplierName = supplier?.basic_info?.name;
+    await logActivity({
+      model_name: "Payment",
+      logs_fields_id: paymentRecord._id,
+      by,
+      action: "Full Settlement",
+      note: `Full settlement for ${supplierName}. Paid:${paymentRecord.total_paid_amount}, Discount:${paymentRecord.discount_received}`,
+      session,
+    });
+
+    // 9. Commit transaction
     await session.commitTransaction();
     session.endSession();
 

@@ -5,13 +5,14 @@ import * as activityLogService from "./activityLog.services.js";
 // @access  Admin
 export const getAllActivityLogs = async (req, res) => {
   try {
-    const { page = 1, limit = 10, action, by } = req.query;
+    const { page = 1, limit = 10, action, by, model_name } = req.query;
 
     const logs = await activityLogService.getAllActivityLogs({
       page: parseInt(page),
       limit: parseInt(limit),
       action,
       by,
+      model_name,
     });
 
     res.status(200).json(logs);
@@ -33,6 +34,21 @@ export const getActivityLogById = async (req, res) => {
 
     res.status(200).json(log);
   } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// @desc    Get activity log by ID with resolved related document
+// @route   GET /api/v1/activity-logs/details/:id
+// @access  Admin
+export const getActivityLogDetails = async (req, res) => {
+  try {
+    const result = await activityLogService.getActivityLogDetails(req.params.id);
+    res.status(200).json(result);
+  } catch (err) {
+    if (err.message === "Activity log not found") {
+      return res.status(404).json({ message: err.message });
+    }
     res.status(400).json({ message: err.message });
   }
 };

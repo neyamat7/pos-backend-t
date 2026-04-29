@@ -1,4 +1,3 @@
-import { logActivity } from "../../utils/activityLogger.js";
 import * as saleService from "./sale.services.js";
 
 // @desc    Create sale record
@@ -9,16 +8,7 @@ export const createSale = async (req, res) => {
     const userId = req.user.id;
 
     const saleData = req.body;
-    const result = await saleService.createSale(saleData);
-
-    // Log activity
-    await logActivity({
-      model_name: "Sale",
-      logs_fields_id: result._id,
-      by: userId,
-      action: "Created",
-      note: `New sale ${result.sale_date} created`,
-    });
+    const result = await saleService.createSale(saleData, { by: userId });
 
     res.status(201).json({
       success: true,
@@ -136,16 +126,7 @@ export const deleteSaleController = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    const result = await saleService.deleteSale(id);
-
-    // Log activity
-    await logActivity({
-      model_name: "Sale",
-      logs_fields_id: id,
-      by: userId,
-      action: "Deleted",
-      note: `Sale ${id} deleted and all changes reverted`,
-    });
+    const result = await saleService.deleteSale(id, { by: userId });
 
     res.status(200).json({
       success: true,

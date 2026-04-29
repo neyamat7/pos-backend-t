@@ -6,6 +6,7 @@
  * @param {String|ObjectId} options.by - The user who performed the action
  * @param {String} options.action - Enum: Added, Created, Returned, Updated, Deleted, Payment
  * @param {String} [options.note] - Optional note or description
+ * @param {import('mongoose').ClientSession} [options.session] - Optional MongoDB session; when provided, the log write is part of the caller's transaction
  */
 
 import activityLogModel from "../features/activity_logs/activityLog.model.js";
@@ -16,17 +17,23 @@ export const logActivity = async ({
   by,
   action,
   note = "",
+  session,
 }) => {
   try {
-    let activity = await activityLogModel.create({
-      model_name,
-      logs_fields_id,
-      by,
-      action,
-      note,
-    });
-
-    // console.log(activity);
+    if (session) {
+      await activityLogModel.create(
+        [{ model_name, logs_fields_id, by, action, note }],
+        { session }
+      );
+    } else {
+      await activityLogModel.create({
+        model_name,
+        logs_fields_id,
+        by,
+        action,
+        note,
+      });
+    }
   } catch (error) {
     console.error("Failed to log activity:", error.message);
   }

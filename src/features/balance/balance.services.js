@@ -108,7 +108,7 @@ export const getBalanceById = async (id) => {
 };
 // @desc    Add customer balance history and deduct from due
 // @access  Admin
-export const addCustomerBalanceService = async (data) => {
+export const addCustomerBalanceService = async (data, { by } = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -190,6 +190,17 @@ export const addCustomerBalanceService = async (data) => {
       await dailyCash.save({ session });
     }
 
+    // 6. Log activity (inside transaction)
+    const customerName = customer?.basic_info?.name;
+    await logActivity({
+      model_name: "Balance",
+      logs_fields_id: savedBalance._id,
+      by,
+      action: "Created",
+      note: `Customer ${customerName} paid ${savedBalance.amount}. Amount deducted from due.`,
+      session,
+    });
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
@@ -203,7 +214,7 @@ export const addCustomerBalanceService = async (data) => {
 };
 // @desc    Give a discount to a customer (reduces due, keeps record as discount type)
 // @access  Admin
-export const applyCustomerDiscountService = async (data) => {
+export const applyCustomerDiscountService = async (data, { by } = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -248,6 +259,17 @@ export const applyCustomerDiscountService = async (data) => {
       },
       { new: true, session }
     );
+
+    // 4. Log activity (inside transaction)
+    const customerName = customer?.basic_info?.name;
+    await logActivity({
+      model_name: "Balance",
+      logs_fields_id: savedDiscount._id,
+      by,
+      action: "Created",
+      note: `Customer Discount of ${savedDiscount.amount} given to ${customerName}. Due adjusted.`,
+      session,
+    });
 
     // Commit transaction
     await session.commitTransaction();

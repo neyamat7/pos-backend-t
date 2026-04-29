@@ -6,7 +6,7 @@ import * as inventoryCrateService from "./inventoryCrate.services.js";
 export const createCrateTransition = async (req, res) => {
   try {
     const newTransition =
-      await inventoryCrateService.createCrateTransitionService(req.body);
+      await inventoryCrateService.createCrateTransitionService(req.body, { by: req.user?.id });
     res.status(201).json({
       success: true,
       message: "Crate transition created successfully",

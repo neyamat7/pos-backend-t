@@ -1,5 +1,3 @@
-import { logActivity } from "../../utils/activityLogger.js";
-import supplierModel from "../supplier/supplier.model.js";
 import * as paymentService from "./payment.services.js";
 
 // @desc    Create transaction
@@ -11,25 +9,9 @@ export const createTransaction = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const result = await paymentService.createTransaction(req.body);
+    const result = await paymentService.createTransaction(req.body, { by: userId });
 
     const transaction = result.payment;
-
-    // Get supplier info
-    const supplier = await supplierModel
-      .findById(transaction.supplierId)
-      .select("basic_info.name");
-
-    const supplierName = supplier?.basic_info?.name;
-
-    // Log activity
-    await logActivity({
-      model_name: "Payment",
-      logs_fields_id: transaction._id,
-      by: userId,
-      action: "Payment Cleared",
-      note: `Payment clear for ${supplierName}. Amount:${transaction.payable_amount} `,
-    });
 
     res.status(201).json({
       success: true,
@@ -96,25 +78,7 @@ export const getTransactionDetails = async (req, res, next) => {
 export const clearSupplierSettlementController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const result = await paymentService.clearSupplierSettlement(req.body);
-
-    const transaction = result.payment;
-
-    // Get supplier info
-    const supplier = await supplierModel
-      .findById(transaction.supplierId)
-      .select("basic_info.name");
-
-    const supplierName = supplier?.basic_info?.name;
-
-    // Log activity
-    await logActivity({
-      model_name: "Payment",
-      logs_fields_id: transaction._id,
-      by: userId,
-      action: "Full Settlement",
-      note: `Full settlement for ${supplierName}. Paid:${transaction.total_paid_amount}, Discount:${transaction.discount_received}`,
-    });
+    const result = await paymentService.clearSupplierSettlement(req.body, { by: userId });
 
     res.status(200).json(result);
   } catch (error) {

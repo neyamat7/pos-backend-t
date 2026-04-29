@@ -1,7 +1,7 @@
 import express from "express";
 import {
-  getAllActivityLogs,
-  getActivityLogById,
+    getActivityLogDetails,
+    getAllActivityLogs
 } from "./activityLog.controller.js";
 
 const router = express.Router();
@@ -9,7 +9,7 @@ const router = express.Router();
 // get all activity logs
 router.get("/all", getAllActivityLogs);
 
-// get single activity log by ID
-router.get("/details/:id", getActivityLogById);
+// get single activity log by ID with resolved related document
+router.get("/details/:id", getActivityLogDetails);
 
 export default router;
