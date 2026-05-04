@@ -1,5 +1,5 @@
 import express from "express";
-import { authMiddleware } from "../../middleware/auth.js";
+import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
 import {
   createCustomer,
   getAllCustomers,
@@ -33,7 +33,7 @@ router.get("/details/:id", getCustomerById);
 router.get("/due-list", getDueCustomersController);
 
 // Soft delete (archive)
-router.delete("/delete/:id", authMiddleware, softDeleteCustomer);
+router.delete("/delete/:id", authMiddleware, adminMiddleware, softDeleteCustomer);
 
 // Restore from archive
 router.patch("/restore/:id", authMiddleware, restoreCustomer);

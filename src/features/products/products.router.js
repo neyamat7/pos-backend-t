@@ -1,6 +1,6 @@
 import express from "express";
 
-import { authMiddleware } from "../../middleware/auth.js";
+import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
 import {
   createProduct,
   deleteProduct,
@@ -24,6 +24,6 @@ router.post("/add", authMiddleware, createProduct);
 router.put("/update/:id", authMiddleware, updateProduct);
 
 // Soft delete a product
-router.delete("/delete/:id", authMiddleware, deleteProduct);
+router.delete("/delete/:id", authMiddleware, adminMiddleware, deleteProduct);
 
 export default router;

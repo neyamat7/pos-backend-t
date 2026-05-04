@@ -19,7 +19,7 @@ import {
   uploadReceiptImage,
 } from "./inventoryLots.controller.js";
 
-import { authMiddleware } from "../../middleware/auth.js";
+import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
 
 const router = express.Router();
 
@@ -64,6 +64,6 @@ router.get("/analytics", getLotsAnalyticsController);
 router.post("/:id/receipt", uploadSingle.single("image"), uploadReceiptImage);
 router.delete("/:id/receipt/:imageId", deleteReceiptImage);
 
-router.delete("/:id", deleteLot);
+router.delete("/:id", authMiddleware, adminMiddleware, deleteLot);
 
 export default router;

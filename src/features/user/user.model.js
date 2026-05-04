@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    plain_password: {
+      type: String,
+      default: '',
+    },
+
     image: {
       type: String,
     },

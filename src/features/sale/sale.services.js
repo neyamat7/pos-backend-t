@@ -9,6 +9,7 @@ import inventoryLotsModel from "../inventoryLots/inventoryLots.model.js";
 import { calculateLotFinalProfitLoss } from "../inventoryLots/inventoryLots.services.js";
 import { updateSupplierDueForStockOut } from "../supplier/supplier.service.js";
 import Sale from "./sale.model.js";
+import { logActivity } from "../../utils/activityLogger.js";
 
 // @desc Create sale a sale list + Update customer collection  ( caret info + due + balance ) Update inventory lots ( total sold + total sold kg + lotCommission + customerCommission ) + Create Income document
 // @access  Admin

@@ -217,3 +217,27 @@ export const getArchivedSuppliers = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc    Toggle supplier pin status
+// @route   PATCH /api/v1/suppliers/pin/:id
+export const toggleSupplierPin = async (req, res) => {
+  try {
+    const supplier = await supplierService.toggleSupplierPin(req.params.id);
+
+    // Log activity
+    await logActivity({
+      model_name: "Supplier",
+      logs_fields_id: supplier._id,
+      by: req.user.id,
+      action: "Updated",
+      note: `Supplier ${supplier.basic_info.name} pin status toggled`,
+    });
+
+    res.status(200).json({
+      message: "Supplier pin status updated successfully",
+      supplier,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};

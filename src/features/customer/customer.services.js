@@ -69,7 +69,7 @@ export const getAllCustomers = async (page, limit, search) => {
     .skip(skip)
     .limit(limit)
     .limit(limit)
-    .sort({ isPinned: -1, createdAt: -1 });
+    .sort({ isPinned: -1, pinnedAt: 1, createdAt: -1 });
 
   return {
     total,
@@ -260,9 +260,13 @@ export const toggleCustomerPin = async (id) => {
     throw new Error("Customer not found");
   }
 
+  const newPinnedStatus = !customer.isPinned;
   return await customerModel.findByIdAndUpdate(
     id,
-    { isPinned: !customer.isPinned },
+    { 
+      isPinned: newPinnedStatus,
+      pinnedAt: newPinnedStatus ? new Date() : null 
+    },
     { new: true }
   );
 };

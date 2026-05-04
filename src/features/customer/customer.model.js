@@ -83,10 +83,14 @@ const customerSchema = new mongoose.Schema(
       },
     },
 
-    // Soft Delete Fields
+    
     isPinned: {
       type: Boolean,
       default: false,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
     },
 
     isActive: {

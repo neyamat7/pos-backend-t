@@ -1,5 +1,5 @@
 import express from "express";
-import { authMiddleware } from "../../middleware/auth.js";
+import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
 import {
     createSupplier,
     getAllSuppliers,
@@ -9,6 +9,7 @@ import {
     getSuppliersByQuery,
     restoreSupplier,
     softDeleteSupplier,
+    toggleSupplierPin,
     updateSupplier,
 } from "./supplier.controller.js";
 
@@ -32,10 +33,13 @@ router.put("/update/:id", authMiddleware, updateSupplier);
 router.get("/due-list", getDueSuppliersController);
 
 // Soft delete (archive)
-router.delete("/delete/:id", authMiddleware, softDeleteSupplier);
+router.delete("/delete/:id", authMiddleware, adminMiddleware, softDeleteSupplier);
 
 // Restore from archive
 router.patch("/restore/:id", authMiddleware, restoreSupplier);
+
+// Toggle pin status
+router.patch("/pin/:id", authMiddleware, toggleSupplierPin);
 
 // Get archived list
 router.get("/archived", authMiddleware, getArchivedSuppliers);

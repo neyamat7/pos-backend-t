@@ -95,6 +95,15 @@ const supplierSchema = new mongoose.Schema(
       },
     },
 
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+
     // Soft Delete Fields
     isActive: {
       type: Boolean,

@@ -57,7 +57,7 @@ export const getAllSuppliers = async (page, limit, search = "") => {
 
   const total = await Supplier.countDocuments(searchFilter);
   const suppliers = await Supplier.find(searchFilter)
-    .sort({ createdAt: -1 })
+    .sort({ isPinned: -1, pinnedAt: 1, createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
@@ -338,4 +338,24 @@ export const getArchivedSuppliers = async (page, limit, search) => {
     totalPages: Math.ceil(total / limit),
     suppliers,
   };
+};
+
+// @desc    Toggle supplier pin status
+// @access  Admin
+export const toggleSupplierPin = async (id) => {
+  const supplier = await Supplier.findById(id);
+
+  if (!supplier) {
+    throw new Error("Supplier not found");
+  }
+
+  const newPinnedStatus = !supplier.isPinned;
+  return await Supplier.findByIdAndUpdate(
+    id,
+    { 
+      isPinned: newPinnedStatus,
+      pinnedAt: newPinnedStatus ? new Date() : null 
+    },
+    { new: true }
+  );
 };
