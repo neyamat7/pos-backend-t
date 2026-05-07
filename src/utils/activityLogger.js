@@ -19,13 +19,15 @@ export const logActivity = async ({
   note = "",
   session,
 }) => {
-  try {
-    if (session) {
-      await activityLogModel.create(
-        [{ model_name, logs_fields_id, by, action, note }],
-        { session }
-      );
-    } else {
+  if (session) {
+    // Inside a transaction — let errors propagate so the transaction rolls back
+    await activityLogModel.create(
+      [{ model_name, logs_fields_id, by, action, note }],
+      { session }
+    );
+  } else {
+    // Outside a transaction — swallow errors so a log failure never breaks the operation
+    try {
       await activityLogModel.create({
         model_name,
         logs_fields_id,
@@ -33,8 +35,8 @@ export const logActivity = async ({
         action,
         note,
       });
+    } catch (error) {
+      console.error("Failed to log activity:", error.message);
     }
-  } catch (error) {
-    console.error("Failed to log activity:", error.message);
   }
 };
