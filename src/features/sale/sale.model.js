@@ -90,6 +90,12 @@ const saleSchema = new mongoose.Schema(
               default: 0,
             },
 
+            // When true: crate is free, no charge, no customer debt, crates return to warehouse
+            free_crate: {
+              type: Boolean,
+              default: false,
+            },
+
             box_quantity: {
               type: Number,
               default: 0,

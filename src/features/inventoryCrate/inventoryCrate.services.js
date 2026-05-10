@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { logActivity } from "../../utils/activityLogger.js";
 import { getOrCreateDailyCash } from "../../utils/getDailyCash.js";
 import { CashTransaction } from "../cash-management/cash-management.model.js";
 import customerModel from "../customer/customer.model.js";
@@ -465,8 +466,15 @@ export const updateCrateOrSupplierService = async (
             note: `Adjustment for re-stock update (${inventory._id})`
           }], { session });
 
-          dailyCash.cashOut += payoutDiff;
-          dailyCash.closingCash -= payoutDiff;
+          // payoutDiff > 0 → cash leaves drawer (OUT)
+          // payoutDiff < 0 → cash returns to drawer (IN reversal)
+          if (payoutDiff > 0) {
+            dailyCash.cashOut += payoutDiff;
+            dailyCash.closingCash -= payoutDiff;
+          } else {
+            dailyCash.cashIn += Math.abs(payoutDiff);
+            dailyCash.closingCash += Math.abs(payoutDiff);
+          }
           await dailyCash.save({ session });
         }
 
@@ -494,8 +502,15 @@ export const updateCrateOrSupplierService = async (
             note: `Adjustment for new stock update (${inventory._id})`
           }], { session });
 
-          dailyCash.cashOut += payoutDiff;
-          dailyCash.closingCash -= payoutDiff;
+          // payoutDiff > 0 → more cash spent (OUT)
+          // payoutDiff < 0 → less cash spent, reversal (IN)
+          if (payoutDiff > 0) {
+            dailyCash.cashOut += payoutDiff;
+            dailyCash.closingCash -= payoutDiff;
+          } else {
+            dailyCash.cashIn += Math.abs(payoutDiff);
+            dailyCash.closingCash += Math.abs(payoutDiff);
+          }
           await dailyCash.save({ session });
         }
 

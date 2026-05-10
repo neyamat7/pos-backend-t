@@ -1,15 +1,16 @@
 import mongoose from "mongoose";
 
+import { logActivity } from "../../utils/activityLogger.js";
 import { getOrCreateDailyCash } from "../../utils/getDailyCash.js";
 import { CashTransaction } from "../cash-management/cash-management.model.js";
 import customerModel from "../customer/customer.model.js";
 import customerCrateHistoryModel from "../customerCrateHistory/customerCrateHistory.model.js";
 import incomeModel from "../income/income.model.js";
+import { CrateTotal } from "../inventoryCrate/inventoryCrate.model.js";
 import inventoryLotsModel from "../inventoryLots/inventoryLots.model.js";
 import { calculateLotFinalProfitLoss } from "../inventoryLots/inventoryLots.services.js";
 import { updateSupplierDueForStockOut } from "../supplier/supplier.service.js";
 import Sale from "./sale.model.js";
-import { logActivity } from "../../utils/activityLogger.js";
 
 // @desc Create sale a sale list + Update customer collection  ( caret info + due + balance ) Update inventory lots ( total sold + total sold kg + lotCommission + customerCommission ) + Create Income document
 // @access  Admin
@@ -57,13 +58,23 @@ export const createSale = async (saleData, { by } = {}) => {
     await sale.save({ session });
 
     // 3. Calculate total crates used in this sale
+    // Separate free crates (returned immediately) from normal crates (customer keeps)
     let totalCrateType1 = 0;
     let totalCrateType2 = 0;
+    let freeCrateType1 = 0;
+    let freeCrateType2 = 0;
 
     saleData.items.forEach((item) => {
       item.selected_lots.forEach((lot) => {
-        totalCrateType1 += Number(lot.crate_type1) || 0;
-        totalCrateType2 += Number(lot.crate_type2) || 0;
+        if (lot.free_crate) {
+          // Free crate: customer returns immediately — goes to warehouse, not customer debt
+          freeCrateType1 += Number(lot.crate_type1) || 0;
+          freeCrateType2 += Number(lot.crate_type2) || 0;
+        } else {
+          // Normal crate: customer keeps — tracked as customer debt
+          totalCrateType1 += Number(lot.crate_type1) || 0;
+          totalCrateType2 += Number(lot.crate_type2) || 0;
+        }
       });
     });
 
@@ -80,7 +91,7 @@ export const createSale = async (saleData, { by } = {}) => {
         currentCustomerBalance - amountUsedFromBalance;
     }
 
-    // Update crates
+    // Update crates — only non-free crates go to customer debt
     const newCrateType1 =
       (Number(customer.crate_info?.type_1) || 0) + totalCrateType1;
     const newCrateType2 =
@@ -95,6 +106,17 @@ export const createSale = async (saleData, { by } = {}) => {
       { $set: updates },
       { session, new: true }
     );
+
+    // 5a. Free crates return to warehouse stock (CrateTotal)
+    if (freeCrateType1 > 0 || freeCrateType2 > 0) {
+      let crateTotals = await CrateTotal.findOne().session(session);
+      if (!crateTotals) {
+        crateTotals = (await CrateTotal.create([{}], { session }))[0];
+      }
+      if (freeCrateType1 > 0) crateTotals.remaining_type_1 += freeCrateType1;
+      if (freeCrateType2 > 0) crateTotals.remaining_type_2 += freeCrateType2;
+      await crateTotals.save({ session });
+    }
 
     let lotIds = [];
     // 6. Update inventory lots
@@ -278,7 +300,8 @@ export const createSale = async (saleData, { by } = {}) => {
           if ((inventoryLot.supplierDueAdded || 0) === 0) {
             const totalSoldAmount =
               (Number(inventoryLot.sales?.totalSoldPrice) || 0) + soldPrice;
-            const lotProfit = Number(inventoryLot.profits?.lotProfit) || 0;
+            // Include current sale's commission in lotProfit (it hasn't been saved yet)
+            const lotProfit = Number(inventoryLot.profits?.lotProfit) + (inventoryLot.hasCommission ? lotCommission : 0) || 0;
             const totalExpenses =
               Number(inventoryLot.expenses?.total_expenses) || 0;
 
@@ -329,7 +352,8 @@ export const createSale = async (saleData, { by } = {}) => {
 
     await incomeModel.create([incomeData], { session });
 
-    // 8. Create Customer Crate History if crates used
+    // 8. Create Customer Crate History only for non-free crates
+    // Free crates are returned immediately — no history record needed
     if (totalCrateType1 > 0 || totalCrateType2 > 0) {
       const crateHistoryData = {
         saleId: sale._id,
@@ -893,6 +917,7 @@ export const getLotSummaryService = async (lotId) => {
         lot_name: "$lot.lot_name",
         supplier_name: "$supplier.basic_info.name",
         lot_expenses: "$lot.expenses",
+        supplier_due_added: "$lot.supplierDueAdded",
 
         sale: {
           // Product type flags
@@ -911,6 +936,7 @@ export const getLotSummaryService = async (lotId) => {
           // Common fields
           discount_Kg: "$items.selected_lots.discount_Kg",
           unit_price: "$items.selected_lots.unit_price",
+          lot_commission_amount: "$items.selected_lots.lot_commission_amount",
 
           total_price: {
             $cond: [
@@ -987,6 +1013,7 @@ export const getLotSummaryService = async (lotId) => {
         lot_name: { $first: "$lot_name" },
         supplier_name: { $first: "$supplier_name" },
         lot_expenses: { $first: "$lot_expenses" },
+        supplier_due_added: { $first: "$supplier_due_added" },
         sales: { $push: "$sale" }, // all sale items under this lot
       },
     },
@@ -1012,13 +1039,21 @@ export const deleteSale = async (saleId, { by } = {}) => {
     }
 
     // 2. Calculate total crates used in this sale (for customer revert)
+    // Separate free crates from normal crates
     let totalCrateType1 = 0;
     let totalCrateType2 = 0;
+    let freeCrateType1 = 0;
+    let freeCrateType2 = 0;
 
     sale.items.forEach((item) => {
       item.selected_lots.forEach((lot) => {
-        totalCrateType1 += Number(lot.crate_type1) || 0;
-        totalCrateType2 += Number(lot.crate_type2) || 0;
+        if (lot.free_crate) {
+          freeCrateType1 += Number(lot.crate_type1) || 0;
+          freeCrateType2 += Number(lot.crate_type2) || 0;
+        } else {
+          totalCrateType1 += Number(lot.crate_type1) || 0;
+          totalCrateType2 += Number(lot.crate_type2) || 0;
+        }
       });
     });
 
@@ -1066,6 +1101,16 @@ export const deleteSale = async (saleId, { by } = {}) => {
       { $set: customerUpdates },
       { session, new: true }
     );
+
+    // 3a. Revert free crates from warehouse stock
+    if (freeCrateType1 > 0 || freeCrateType2 > 0) {
+      const crateTotals = await CrateTotal.findOne().session(session);
+      if (crateTotals) {
+        if (freeCrateType1 > 0) crateTotals.remaining_type_1 = Math.max(0, crateTotals.remaining_type_1 - freeCrateType1);
+        if (freeCrateType2 > 0) crateTotals.remaining_type_2 = Math.max(0, crateTotals.remaining_type_2 - freeCrateType2);
+        await crateTotals.save({ session });
+      }
+    }
 
     // 4. Revert each Inventory Lot
     for (const item of sale.items) {
