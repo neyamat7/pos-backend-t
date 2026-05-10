@@ -218,6 +218,25 @@ export const getArchivedSuppliers = async (req, res) => {
   }
 };
 
+// @desc    Get all suppliers sorted for crate management page
+// @route   GET /api/v1/suppliers/crate-list
+export const getSuppliersForCrateManagement = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const result = await supplierService.getSuppliersForCrateManagement(
+      parseInt(page),
+      parseInt(limit),
+      search
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Get Suppliers For Crate Management Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // @desc    Toggle supplier pin status
 // @route   PATCH /api/v1/suppliers/pin/:id
 export const toggleSupplierPin = async (req, res) => {

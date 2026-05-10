@@ -1,16 +1,17 @@
 import express from "express";
-import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
+import { adminMiddleware, authMiddleware } from "../../middleware/auth.js";
 import {
-  createCustomer,
-  getAllCustomers,
-  getArchivedCustomers,
-  getCustomerById,
-  getCustomersByQuery,
-  getDueCustomersController,
-  restoreCustomer,
-  softDeleteCustomer,
-  toggleCustomerPin,
-  updateCustomer,
+    createCustomer,
+    getAllCustomers,
+    getArchivedCustomers,
+    getCustomerById,
+    getCustomersByQuery,
+    getCustomersForCrateManagement,
+    getDueCustomersController,
+    restoreCustomer,
+    softDeleteCustomer,
+    toggleCustomerPin,
+    updateCustomer,
 } from "./customer.controller.js";
 
 const router = express.Router();
@@ -25,6 +26,9 @@ router.put("/update/:id", authMiddleware, updateCustomer);
 
 // get all customer
 router.get("/all", getAllCustomers);
+
+// crate management list (priority sorted)
+router.get("/crate-list", getCustomersForCrateManagement);
 
 // get details view
 router.get("/details/:id", getCustomerById);

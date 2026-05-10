@@ -145,6 +145,25 @@ export const getDueCustomersController = async (req, res, next) => {
   }
 };
 
+// @desc    Get all customers sorted for crate management page
+// @route   GET /api/v1/customer/crate-list
+export const getCustomersForCrateManagement = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const result = await customerService.getCustomersForCrateManagement(
+      parseInt(page),
+      parseInt(limit),
+      search
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Get Customers For Crate Management Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // @desc    Soft delete customer (Archive)
 // @route   DELETE /api/v1/customers/:id
 export const softDeleteCustomer = async (req, res) => {

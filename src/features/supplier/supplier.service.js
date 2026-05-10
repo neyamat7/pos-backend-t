@@ -340,6 +340,61 @@ export const getArchivedSuppliers = async (page, limit, search) => {
   };
 };
 
+// @desc    Get all suppliers sorted for crate management page
+//          Priority: 1) Pinned, 2) Has due crates (crate1+crate2 > 0), 3) Rest
+// @access  Admin
+export const getSuppliersForCrateManagement = async (page, limit, search = "") => {
+  const skip = (page - 1) * limit;
+
+  const searchFilter = { isActive: true };
+  if (search) {
+    const regex = new RegExp(search, "i");
+    searchFilter.$or = [
+      { "basic_info.name": regex },
+      { "contact_info.phone": regex },
+    ];
+  }
+
+  const total = await Supplier.countDocuments(searchFilter);
+
+  const suppliers = await Supplier.aggregate([
+    { $match: searchFilter },
+    {
+      $addFields: {
+        totalDueCrates: {
+          $add: [
+            { $ifNull: ["$crate_info.crate1", 0] },
+            { $ifNull: ["$crate_info.crate2", 0] },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        hasDueCrates: { $gt: ["$totalDueCrates", 0] },
+      },
+    },
+    {
+      $sort: {
+        isPinned: -1,        // 1) Pinned first
+        hasDueCrates: -1,    // 2) Has due crates
+        totalDueCrates: -1,  // 3) Higher due crates first within that group
+        createdAt: -1,       // 4) Newest first as tiebreaker
+      },
+    },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  return {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    suppliers,
+  };
+};
+
 // @desc    Toggle supplier pin status
 // @access  Admin
 export const toggleSupplierPin = async (id) => {

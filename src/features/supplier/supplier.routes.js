@@ -1,5 +1,5 @@
 import express from "express";
-import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
+import { adminMiddleware, authMiddleware } from "../../middleware/auth.js";
 import {
     createSupplier,
     getAllSuppliers,
@@ -7,6 +7,7 @@ import {
     getDueSuppliersController,
     getSupplierById,
     getSuppliersByQuery,
+    getSuppliersForCrateManagement,
     restoreSupplier,
     softDeleteSupplier,
     toggleSupplierPin,
@@ -22,6 +23,9 @@ router.post("/add", authMiddleware, createSupplier);
 
 // add get all
 router.get("/all", getAllSuppliers);
+
+// crate management list (priority sorted)
+router.get("/crate-list", getSuppliersForCrateManagement);
 
 // get details view
 router.get("/details/:id", getSupplierById);
