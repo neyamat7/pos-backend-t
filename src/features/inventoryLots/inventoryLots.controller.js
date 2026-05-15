@@ -310,6 +310,48 @@ export const deleteLot = async (req, res) => {
   }
 };
 
+// @desc    Update lot name
+// @route   PATCH /api/v1/inventoryLots/:id/info
+// @access  Admin
+export const updateLotInfoController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { lot_name } = req.body;
+
+    const updatedLot = await inventoryLotsService.updateLotInfoService(id, { lot_name });
+
+    res.status(200).json({
+      success: true,
+      message: "Lot info updated successfully",
+      lot: updatedLot,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update all lot expenses
+// @route   PATCH /api/v1/inventoryLots/:lotId/expenses
+// @access  Admin
+export const updateAllLotExpensesController = async (req, res) => {
+  try {
+    const { lotId } = req.params;
+
+    const updatedLot = await inventoryLotsService.updateAllLotExpenses(
+      lotId,
+      req.body
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Lot expenses updated successfully",
+      lot: updatedLot,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Upload lot receipt image
 // @route   POST /api/v1/inventoryLots/:id/receipt
 // @access  Admin

@@ -1,25 +1,27 @@
 import express from "express";
 import { uploadSingle } from "../../middleware/upload.js";
 import {
-  adjustStockController,
-  createLots,
-  deleteLot,
-  deleteReceiptImage,
-  fetchAllLots,
-  fetchLotDetails,
-  getAllInStockLots,
-  getLotsAnalyticsController,
-  getProfitLoss,
-  getUnpaidAndOutOfStockLots,
-  getUnpaidAndOutOfStockLotsBySupplier,
-  lotsBySupplier,
-  updateExtraExpenseController,
-  updateLotCostController,
-  updateLotStatusController,
-  uploadReceiptImage,
+    adjustStockController,
+    createLots,
+    deleteLot,
+    deleteReceiptImage,
+    fetchAllLots,
+    fetchLotDetails,
+    getAllInStockLots,
+    getLotsAnalyticsController,
+    getProfitLoss,
+    getUnpaidAndOutOfStockLots,
+    getUnpaidAndOutOfStockLotsBySupplier,
+    lotsBySupplier,
+    updateAllLotExpensesController,
+    updateExtraExpenseController,
+    updateLotCostController,
+    updateLotInfoController,
+    updateLotStatusController,
+    uploadReceiptImage,
 } from "./inventoryLots.controller.js";
 
-import { authMiddleware, adminMiddleware } from "../../middleware/auth.js";
+import { adminMiddleware, authMiddleware } from "../../middleware/auth.js";
 
 const router = express.Router();
 
@@ -55,6 +57,12 @@ router.patch("/:lotId/adjust-stock", adjustStockController);
 router.patch("/:lotId/extra-expense", updateExtraExpenseController);
 
 router.patch("/:lotId/cost", updateLotCostController);
+
+// Update lot name
+router.patch("/:id/info", authMiddleware, updateLotInfoController);
+
+// Update all lot expenses
+router.patch("/:lotId/expenses", authMiddleware, updateAllLotExpensesController);
 
 router.get("/profit-loss", getProfitLoss);
 

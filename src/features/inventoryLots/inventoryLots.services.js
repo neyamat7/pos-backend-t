@@ -49,13 +49,6 @@ export const createLotsForPurchase = async (purchaseId, userId = null) => {
 
       // Loop over lots for this supplier
       for (const lot of item.lots) {
-        // Check duplicate lot
-        const existingLot = await inventoryLotsModel
-          .findOne({ lot_name: lot.lot_name })
-          .session(session);
-        if (existingLot)
-          throw new Error(`Lot name "${lot.lot_name}" already exists`);
-
         // Generate lot ID early so we can use it in expense reference
         const lotId = new mongoose.Types.ObjectId();
 
@@ -1270,4 +1263,108 @@ export const removeReceiptImageService = async (lotId, imageId) => {
   await lot.save();
 
   return { success: true, message: "Receipt image removed from lot" };
+};
+
+// @desc Update lot name only
+// @access Admin
+export const updateLotInfoService = async (lotId, { lot_name }) => {
+  const lot = await inventoryLotsModel.findById(lotId);
+  if (!lot) throw new Error("Lot not found");
+
+  if (lot_name && lot_name.trim()) {
+    lot.lot_name = lot_name.trim();
+  }
+
+  await lot.save();
+  return lot;
+};
+
+// @desc Update all editable expenses on a lot
+//       Recalculates total_expenses and adjusts supplierDueAdded if stock out
+// @access Admin
+export const updateAllLotExpenses = async (lotId, expenseData) => {
+  const {
+    labour,
+    transportation,
+    van_vara,
+    moshjid,
+    trading_post,
+    custom_expenses,
+    extra_expense,
+    extra_expense_note,
+  } = expenseData;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const lot = await inventoryLotsModel.findById(lotId).session(session);
+    if (!lot) throw new Error("Lot not found");
+
+    // Update fixed expense fields
+    lot.expenses.labour = Number(labour) || 0;
+    lot.expenses.transportation = Number(transportation) || 0;
+    lot.expenses.van_vara = Number(van_vara) || 0;
+    lot.expenses.moshjid = Number(moshjid) || 0;
+    lot.expenses.trading_post = Number(trading_post) || 0;
+
+    // Update custom expenses array
+    if (Array.isArray(custom_expenses)) {
+      lot.expenses.custom_expenses = custom_expenses
+        .filter((e) => e.name && e.name.trim())
+        .map((e) => ({ name: e.name.trim(), amount: Number(e.amount) || 0 }));
+    }
+
+    // Update extra expense
+    lot.expenses.extra_expense = Number(extra_expense) || 0;
+    lot.expenses.extra_expense_note = extra_expense_note || "";
+
+    // Recalculate total_expenses
+    const totalCustomExpenses =
+      lot.expenses.custom_expenses?.reduce(
+        (sum, item) => sum + (item.amount || 0),
+        0
+      ) || 0;
+
+    lot.expenses.total_expenses =
+      lot.expenses.labour +
+      lot.expenses.transportation +
+      lot.expenses.van_vara +
+      lot.expenses.moshjid +
+      lot.expenses.trading_post +
+      lot.expenses.other_expenses +
+      lot.expenses.extra_expense +
+      totalCustomExpenses;
+
+    await lot.save({ session });
+
+    // If lot is stock out, adjust supplier due with new total expenses
+    if (lot.status === "stock out") {
+      const totalSoldAmount = Number(lot.sales?.totalSoldPrice) || 0;
+      const lotProfit = Number(lot.profits?.lotProfit) || 0;
+      const totalExpenses = lot.expenses.total_expenses;
+
+      const newDueAmount = totalSoldAmount - lotProfit - totalExpenses;
+      const previousDueAdded = Number(lot.supplierDueAdded) || 0;
+
+      await adjustSupplierDue({
+        supplierId: lot.supplierId,
+        previousDueAdded,
+        newDueAmount,
+        session,
+      });
+
+      lot.supplierDueAdded = newDueAmount;
+      await lot.save({ session });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return lot;
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
 };
